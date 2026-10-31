@@ -217,7 +217,7 @@ describe("Apply", { timeout: TEST_MS }, () => {
     ["cancelled", () => settled({ outcome: "canceled", stop: { code: "canceled" } }), m.view_apply_canceled(), m.apply_stop_canceled()],
     ["failed", () => settled({ outcome: "failed", stop: { code: "originals_unverified", count: 2 } }), m.op_apply_failed(), m.apply_stop_originals_unverified({ count: 2 })],
     ["interrupted", () => settled({ outcome: "failed", stop: { code: "interrupted" } }), m.op_apply_failed(), m.apply_stop_interrupted()],
-    ["stopped", (): ApplyStatus_Serialize => ({ state: "stopped", progress: progress() }), m.view_apply_unsettled(), null],
+    ["stopped", (): ApplyStatus_Serialize => ({ state: "stopped", progress: progress(), error: null }), m.view_apply_unsettled(), null],
   ]
   for (const [name, answer, title, line] of ended)
     it(`shows a ${name} Apply as ${name}, never as applied`, async () => {
@@ -229,6 +229,41 @@ describe("Apply", { timeout: TEST_MS }, () => {
       if (line) expect(screen.getByText(line)).toBeInTheDocument()
       expect(screen.queryByText(m.view_apply_applied())).toBeNull()
     })
+
+  it("shows an Apply that broke off on an error with its error, never as closed during Apply", async () => {
+    const error = { code: "identity_conflict" as const, identity: P, scope: null, retry: "none" as const, currentRevision: null, successors: [], window: null, correction: null, field: null }
+    host({ project_apply: () => running(), project_apply_status: (): ApplyStatus_Serialize => ({ state: "stopped", progress: progress({ phase: "old_moved" }), error }) })
+    const { client } = renderAt(`/projects/${P}?stage=view`)
+    await screen.findByText(m.project_view_settings())
+    act(() => startApply(client, { projectId: P, desiredRevision: 4, basisDigest: "digest-a", ticked: [] }))
+    expect(await screen.findByText(m.view_apply_broke_off(), undefined, POLLED)).toBeInTheDocument()
+    expect(screen.getByText(m.action_failure_identity_conflict())).toBeInTheDocument()
+    expect(screen.queryByText(m.view_apply_unsettled())).toBeNull()
+    expect(screen.queryByText(m.view_apply_applied())).toBeNull()
+  })
+
+  it("keeps following a running Apply when a status read fails, showing the failure beside Cancel", async () => {
+    let reads = 0
+    const { sent } = host({
+      project_apply: () => running(),
+      project_apply_status: () => {
+        reads += 1
+        if (reads === 1) throw { code: "persistence_failure", retry: "retry", successors: [] }
+        return reads === 2 ? running() : settled()
+      },
+    })
+    const { client } = renderAt(`/projects/${P}?stage=view`)
+    await screen.findByText(m.project_view_settings())
+    act(() => startApply(client, { projectId: P, desiredRevision: 4, basisDigest: "digest-a", ticked: [] }))
+    expect(await screen.findByText(`${m.view_apply_status_unread()} ${m.action_failure_persistence_failure()}`, undefined, POLLED)).toBeInTheDocument()
+    expect(screen.getByText(m.view_apply_running())).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: m.verb_cancel() })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: new RegExp(m.view_apply_review_again()) })).toBeNull()
+    // The next read goes ahead; a successful one clears the failure.
+    await waitFor(() => expect(sent("project_apply_status")).toHaveLength(2), POLLED)
+    await waitFor(() => expect(screen.queryByText(`${m.view_apply_status_unread()} ${m.action_failure_persistence_failure()}`)).toBeNull())
+    expect(await screen.findByText(m.view_apply_applied(), undefined, POLLED)).toBeInTheDocument()
+  })
 
   it("shows the folder a tool holds and since when, and Cancel by the started id reads Cancelling until it settles cancelled", async () => {
     const user = userEvent.setup()

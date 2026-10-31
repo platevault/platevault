@@ -64,12 +64,12 @@ use crate::layout::{
 use crate::library::{blocking, Library};
 use crate::patched_copy::{self, HeaderPatch};
 use crate::{
-    ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview, ApplyReport,
-    ApplyRequest, ApplyStatus, ApplyStop, EntryEvidence, EntryPlacement, ExpectedTree,
-    FileIdentity, ForeignFile, ForeignItem, ForeignItemFailure, ForeignItemState, InputKind,
-    ItemReason, LibraryError, ManifestEntry, NativePath, PinHealth, PreviousItem,
-    PreviousItemReview, Profile, ReasonCode, Revision, SymlinkCapability, ViewFootprint,
-    ViewManifest, ViewMode, ViewPlanEntry,
+    ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview,
+    ApplyProgress, ApplyReport, ApplyRequest, ApplyStatus, ApplyStop, EntryEvidence,
+    EntryPlacement, ErrorResponse, ExpectedTree, FileIdentity, ForeignFile, ForeignItem,
+    ForeignItemFailure, ForeignItemState, InputKind, ItemReason, LibraryError, ManifestEntry,
+    NativePath, PinHealth, PreviousItem, PreviousItemReview, Profile, ReasonCode, Revision,
+    SymlinkCapability, ViewFootprint, ViewManifest, ViewMode, ViewPlanEntry,
 };
 
 /// What Apply asks while it runs (PREP-FR-09, PREP-FR-18).
@@ -102,14 +102,25 @@ pub struct Unattended;
 
 impl ApplyControl for Unattended {}
 
-/// The Applies this process runs now, each with whether Cancel asked it to
-/// stop. An unsettled Apply missing here reads Stopped: nothing runs it.
-static RUNNING: LazyLock<Mutex<HashMap<Uuid, Arc<AtomicBool>>>> = LazyLock::new(Mutex::default);
+/// What this process knows of one Apply it ran: running now, with whether
+/// Cancel asked it to stop, or broken off with the error its run returned.
+/// An unsettled Apply missing here reads Stopped with no error: nothing in
+/// this process runs it or said why it stopped, as when `PlateVault` closed
+/// during it.
+enum Ran {
+    Running(Arc<AtomicBool>),
+    BrokeOff(ErrorResponse),
+}
+
+/// The Applies this process ran. A broken-off one stays for the rest of the
+/// process: while its journal is unsettled, its status reads Stopped with
+/// why, until the next start settles it.
+static RAN: LazyLock<Mutex<HashMap<Uuid, Ran>>> = LazyLock::new(Mutex::default);
 
 /// Recovers from poisoning: a run that panicked must leave the registry
 /// usable, and a panicking `Drop` would abort.
-fn running() -> MutexGuard<'static, HashMap<Uuid, Arc<AtomicBool>>> {
-    RUNNING.lock().unwrap_or_else(PoisonError::into_inner)
+fn ran() -> MutexGuard<'static, HashMap<Uuid, Ran>> {
+    RAN.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// This process's claim on one Apply, from the commit of its reservation
@@ -123,14 +134,24 @@ struct Claim {
 impl Claim {
     fn take(operation_id: Uuid) -> Self {
         let cancel = Arc::new(AtomicBool::new(false));
-        running().insert(operation_id, Arc::clone(&cancel));
+        ran().insert(operation_id, Ran::Running(Arc::clone(&cancel)));
         Self { operation_id, cancel }
+    }
+
+    /// The run returned `error`: while its journal stays unsettled, the
+    /// Apply reads Stopped with it. Replaced in one step, so no status read
+    /// sees it Stopped without its error.
+    fn broke_off(&self, error: ErrorResponse) {
+        ran().insert(self.operation_id, Ran::BrokeOff(error));
     }
 }
 
 impl Drop for Claim {
     fn drop(&mut self) {
-        running().remove(&self.operation_id);
+        let mut ran = ran();
+        if matches!(ran.get(&self.operation_id), Some(Ran::Running(_))) {
+            ran.remove(&self.operation_id);
+        }
     }
 }
 
@@ -310,14 +331,27 @@ impl Library {
     ///
     /// # Errors
     /// As [`Self::apply`], for whatever refuses it before it reserves the
-    /// Project. A run that breaks off unsettled is logged and reads Stopped;
-    /// the next start settles it.
+    /// Project; once reserved it returns Running. A run that breaks off
+    /// unsettled reads Stopped with its error, keeping the Project reserved
+    /// for the next start to settle.
     pub async fn start_apply(
         self: &Arc<Self>,
         request: &ApplyRequest,
         control: Arc<dyn ApplyControl>,
     ) -> Result<ApplyStatus, LibraryError> {
-        let started = self.reserve(request, control.as_ref(), Os::SYSTEM).await?;
+        let mut started = self.reserve(request, control.as_ref(), Os::SYSTEM).await?;
+        // Read from the reservation, never the catalog: once the run is
+        // spawned, nothing may turn the start into an error.
+        let status = ApplyStatus::Running {
+            progress: ApplyProgress {
+                operation_id: started.journal.operation_id,
+                project_id: started.journal.project_id,
+                phase: started.journal.phase,
+                started_at: std::mem::take(&mut started.reserved_at),
+                waiting: None,
+            },
+            cancel_requested: false,
+        };
         let operation_id = started.journal.operation_id;
         let library = Arc::clone(self);
         tokio::spawn(async move {
@@ -329,13 +363,14 @@ impl Library {
                 );
             }
         });
-        self.apply_status(operation_id).await
+        Ok(status)
     }
 
     /// The durable state of Apply `operation_id` (PREP-FR-09/18): Running
     /// while this process runs it, with where its journal stands and its
     /// wait for a tool; Stopped when it is unsettled with nothing running
-    /// it; Settled with the report it settled with.
+    /// it, with the error its run broke off with in this process; Settled
+    /// with the report it settled with.
     ///
     /// # Errors
     /// `NotFound` for an unknown Apply; catalog errors.
@@ -343,13 +378,16 @@ impl Library {
         // Read before the journal: a claim is released only once its run
         // returned, so a claim seen here with an unsettled journal read
         // after it means the run is still going.
-        let cancel_requested =
-            running().get(&operation_id).map(|cancel| cancel.load(Ordering::Acquire));
+        let here = ran().get(&operation_id).map(|ran| match ran {
+            Ran::Running(cancel) => Ok(cancel.load(Ordering::Acquire)),
+            Ran::BrokeOff(error) => Err(error.clone()),
+        });
         Ok(match self.catalog().apply_record(operation_id).await? {
             ApplyRecord::Settled(report) => ApplyStatus::Settled { report },
-            ApplyRecord::Unsettled(progress) => match cancel_requested {
-                Some(cancel_requested) => ApplyStatus::Running { progress, cancel_requested },
-                None => ApplyStatus::Stopped { progress },
+            ApplyRecord::Unsettled(progress) => match here {
+                Some(Ok(cancel_requested)) => ApplyStatus::Running { progress, cancel_requested },
+                Some(Err(error)) => ApplyStatus::Stopped { progress, error: Some(error) },
+                None => ApplyStatus::Stopped { progress, error: None },
             },
         })
     }
@@ -364,7 +402,7 @@ impl Library {
     /// # Errors
     /// `NotFound` for an unknown Apply; catalog errors.
     pub async fn cancel_apply(&self, operation_id: Uuid) -> Result<ApplyStatus, LibraryError> {
-        if let Some(cancel) = running().get(&operation_id) {
+        if let Some(Ran::Running(cancel)) = ran().get(&operation_id) {
             cancel.store(true, Ordering::Release);
         }
         self.apply_status(operation_id).await
@@ -528,18 +566,27 @@ impl Library {
         };
         let ticked: BTreeSet<PathBuf> =
             request.ticked.iter().filter_map(|path| path.relative_path().ok()).collect();
-        Ok(Started { claim, journal, project, inputs, plan, ticked, kept_missing })
+        Ok(Started {
+            claim,
+            reserved_at: reserved.reserved_at,
+            journal,
+            project,
+            inputs,
+            plan,
+            ticked,
+            kept_missing,
+        })
     }
 
     /// Build, verify, swap and settle a reserved Apply; its claim ends as
-    /// this returns.
+    /// this returns, with the error it broke off with, if any.
     async fn run(
         &self,
         started: Started,
         control: &dyn ApplyControl,
         os: Os,
     ) -> Result<ApplyReport, LibraryError> {
-        let Started { claim, journal, project, inputs, plan, ticked, kept_missing } = started;
+        let Started { claim, journal, project, inputs, plan, ticked, kept_missing, .. } = started;
         let control = Claimed { control, cancel: &claim.cancel };
         let project_id = journal.project_id;
         let mut run = Run {
@@ -556,12 +603,19 @@ impl Library {
             building_made: false,
             kept_missing,
         };
-        // What the reservation left, which the swap reads again (plan §3).
-        let after = self.catalog().apply_inputs(project_id).await?;
-        let Some(reserved) = Reserved::of(&run.inputs, &after) else {
-            return run.end(ApplyStop::CatalogMoved).await;
-        };
-        run.build(plan, &ticked, &reserved).await
+        let ended = async {
+            // What the reservation left, which the swap reads again (plan §3).
+            let after = self.catalog().apply_inputs(project_id).await?;
+            let Some(reserved) = Reserved::of(&run.inputs, &after) else {
+                return run.end(ApplyStop::CatalogMoved).await;
+            };
+            run.build(plan, &ticked, &reserved).await
+        }
+        .await;
+        if let Err(error) = &ended {
+            claim.broke_off(error.response(Some(project_id), None));
+        }
+        ended
     }
 
     /// Recover one unsettled Apply after a restart.
@@ -1339,6 +1393,8 @@ impl Delivered {
 /// what its run builds.
 struct Started {
     claim: Claim,
+    /// When the reservation committed (RFC 3339, UTC).
+    reserved_at: String,
     journal: ApplyJournal,
     project: PathBuf,
     inputs: Arc<ApplyInputs>,

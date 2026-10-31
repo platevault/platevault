@@ -2058,7 +2058,8 @@ async fn an_apply_nothing_runs_never_reads_running_across_a_restart() {
 
     let stopped = world.library.apply_status(operation).await.unwrap();
     assert!(
-        matches!(&stopped, ApplyStatus::Stopped { progress } if progress.phase == ApplyPhase::Building),
+        matches!(&stopped, ApplyStatus::Stopped { progress, error: None }
+            if progress.phase == ApplyPhase::Building),
         "{stopped:#?}"
     );
     assert!(matches!(
@@ -2075,4 +2076,70 @@ async fn an_apply_nothing_runs_never_reads_running_across_a_restart() {
     assert_eq!(report.stop, Some(ApplyStop::Interrupted), "{report:#?}");
     let unknown = world.library.apply_status(uuid::Uuid::new_v4()).await.unwrap_err();
     assert_eq!(unknown.code(), LibraryErrorCode::NotFound);
+}
+
+/// Another process creates an empty `View/` the moment the old View has
+/// moved aside: the install is refused, and so is putting the old View back.
+struct TakesView(PathBuf);
+
+impl ApplyControl for TakesView {
+    fn interrupted(&self, phase: ApplyPhase) -> bool {
+        if phase == ApplyPhase::OldMoved {
+            fs::create_dir(&self.0).unwrap();
+        }
+        false
+    }
+}
+
+/// PREP-FR-09: a started Apply whose run breaks off with an error, here
+/// with `View/` left without the old View, reads Stopped with that error,
+/// never as if `PlateVault` closed during it, and the next start still
+/// restores the old View and settles it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_started_apply_that_breaks_off_reads_stopped_with_its_error() {
+    let mut world = world(ViewMode::Copies).await;
+    world.apply().await;
+    let before = World::tree(&world.view());
+    world.bump().await;
+    let preview = world.preview().await;
+
+    let started = world
+        .library
+        .start_apply(&World::request(&preview), Arc::new(TakesView(world.view())))
+        .await
+        .unwrap();
+    let ApplyStatus::Running { progress: began, cancel_requested: false } = started else {
+        panic!("not running as it starts: {started:#?}");
+    };
+    assert_eq!((began.project_id, began.phase), (world.project, ApplyPhase::Reserved));
+    let operation = began.operation_id;
+    let deadline = std::time::Instant::now() + PATIENCE;
+    let stopped = loop {
+        match world.library.apply_status(operation).await.unwrap() {
+            ApplyStatus::Running { .. } => {}
+            status => break status,
+        }
+        assert!(std::time::Instant::now() < deadline, "Apply {operation} never stopped");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    };
+
+    let ApplyStatus::Stopped { progress, error: Some(error) } = &stopped else {
+        panic!("it reads Stopped with why: {stopped:#?}");
+    };
+    assert_eq!(progress.phase, ApplyPhase::OldMoved, "{stopped:#?}");
+    assert_eq!(progress.started_at, began.started_at, "it started when it reserved the Project");
+    assert_eq!(error.code, LibraryErrorCode::IdentityConflict, "{error:#?}");
+    assert_eq!(error.identity, Some(world.project), "{error:#?}");
+    assert_eq!(world.library.cancel_apply(operation).await.unwrap(), stopped, "Cancel leaves it");
+    assert_eq!(fs::read_dir(world.view()).unwrap().count(), 0, "View/ holds no View");
+    assert_eq!(World::tree(&world.previous()), before, "the old View is kept whole");
+
+    fs::remove_dir(world.view()).unwrap();
+    world.reopen().await;
+    assert_eq!(World::tree(&world.view()), before, "the restart restores the old View");
+    let ApplyStatus::Settled { report } = world.library.apply_status(operation).await.unwrap()
+    else {
+        panic!("the restart settles it");
+    };
+    assert_eq!(report.outcome, Some(ApplyOutcome::Failed), "{report:#?}");
 }

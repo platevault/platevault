@@ -160,7 +160,8 @@ pub async fn project_apply(
 /// The durable state of Apply `operation_id`: Running in this shell, with
 /// where its journal stands, which folder a tool holds and since when, and
 /// whether Cancel asked it to stop; Stopped when nothing runs it (the next
-/// start settles it); Settled with its report.
+/// start settles it), with the error its run broke off with in this shell;
+/// Settled with its report.
 ///
 /// # Errors
 /// `NotFound` for an unknown Apply; catalog errors.

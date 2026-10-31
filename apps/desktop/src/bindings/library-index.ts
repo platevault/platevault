@@ -589,7 +589,8 @@ export const commands = {
 	 *  The durable state of Apply `operation_id`: Running in this shell, with
 	 *  where its journal stands, which folder a tool holds and since when, and
 	 *  whether Cancel asked it to stop; Stopped when nothing runs it (the next
-	 *  start settles it); Settled with its report.
+	 *  start settles it), with the error its run broke off with in this shell;
+	 *  Settled with its report.
 	 * 
 	 *  # Errors
 	 *  `NotFound` for an unknown Apply; catalog errors.
@@ -2381,14 +2382,16 @@ export type ApplyStatus = ApplyStatus_Serialize | ApplyStatus_Deserialize;
  */
 export type ApplyStatus_Deserialize = 
 /**  This process runs it; `cancel_requested` once Cancel asked it to stop. */
-({ state: "running"; progress: ApplyProgress; cancelRequested: boolean }) & { report?: never } | 
+({ state: "running"; progress: ApplyProgress; cancelRequested: boolean }) & { error?: never; report?: never } | 
 /**
- *  Unsettled with nothing running it: `PlateVault` closed or the run
- *  broke off; the next start restores the old View or finishes it.
+ *  Unsettled with nothing running it, so the Project stays reserved
+ *  until the next start restores the old View or finishes it. `error`
+ *  is why its run broke off in this process; `None` when no run in this
+ *  process reported one, as when `PlateVault` closed during it.
  */
-({ state: "stopped"; progress: ApplyProgress }) & { cancelRequested?: never; report?: never } | 
+({ state: "stopped"; progress: ApplyProgress; error: ErrorResponse | null }) & { cancelRequested?: never; report?: never } | 
 /**  It ended, with the report it settled with. */
-({ state: "settled"; report: ApplyReport_Deserialize }) & { cancelRequested?: never; progress?: never };
+({ state: "settled"; report: ApplyReport_Deserialize }) & { cancelRequested?: never; error?: never; progress?: never };
 
 /**
  *  The durable state of one Apply (PREP-FR-09): what `project_apply`
@@ -2398,14 +2401,16 @@ export type ApplyStatus_Deserialize =
  */
 export type ApplyStatus_Serialize = 
 /**  This process runs it; `cancel_requested` once Cancel asked it to stop. */
-({ state: "running"; progress: ApplyProgress; cancelRequested: boolean }) & { report?: never } | 
+({ state: "running"; progress: ApplyProgress; cancelRequested: boolean }) & { error?: never; report?: never } | 
 /**
- *  Unsettled with nothing running it: `PlateVault` closed or the run
- *  broke off; the next start restores the old View or finishes it.
+ *  Unsettled with nothing running it, so the Project stays reserved
+ *  until the next start restores the old View or finishes it. `error`
+ *  is why its run broke off in this process; `None` when no run in this
+ *  process reported one, as when `PlateVault` closed during it.
  */
-({ state: "stopped"; progress: ApplyProgress }) & { cancelRequested?: never; report?: never } | 
+({ state: "stopped"; progress: ApplyProgress; error: ErrorResponse | null }) & { cancelRequested?: never; report?: never } | 
 /**  It ended, with the report it settled with. */
-({ state: "settled"; report: ApplyReport_Serialize }) & { cancelRequested?: never; progress?: never };
+({ state: "settled"; report: ApplyReport_Serialize }) & { cancelRequested?: never; error?: never; progress?: never };
 
 /**
  *  Why an Apply ended Failed or Canceled, with the old View in place. The

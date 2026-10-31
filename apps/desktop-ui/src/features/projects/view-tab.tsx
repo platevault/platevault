@@ -113,17 +113,21 @@ function ApplyRunPanel({ projectId, run, onReview }: { projectId: string; run: A
       unavailable: run.phase === "starting" ? blocked(m.view_apply_cancel_not_yet()) : canceling ? blocked(m.view_apply_canceling()) : undefined,
     }
     const waiting = run.phase === "running" ? run.progress.waiting : null
+    const readFailure = run.phase === "running" ? run.readFailure : null
     return (
       <Notice tone="info" title={canceling ? m.view_apply_canceling() : m.view_apply_running()}>
         {waiting ? <p>{m.project_apply_waiting({ time: formatDateTime(waiting.since), path: pathText(waiting.held) })}</p> : null}
+        {readFailure ? <p>{`${m.view_apply_status_unread()} ${failureMessage(m, readFailure)}`}</p> : null}
         <ActionButton action={cancel} />
       </Notice>
     )
   }
   const dismiss: Action = { id: "dismiss-apply", label: m.verb_close(), run: () => dismissApply(projectId) }
   if (run.phase === "stopped") {
+    // Broken off on an error in this session, or stopped by the app closing during it: each says so, never the other.
     return (
-      <Notice tone="warning" title={m.view_apply_unsettled()}>
+      <Notice tone="warning" title={run.error ? m.view_apply_broke_off() : m.view_apply_unsettled()}>
+        {run.error ? <p>{failureMessage(m, { source: "library", command: "projectApply", error: run.error })}</p> : null}
         <ActionButton action={dismiss} />
       </Notice>
     )

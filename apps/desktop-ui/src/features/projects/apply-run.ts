@@ -11,21 +11,25 @@
  *   holds in View and since when, as the status reads it; a
  *   `project_apply_waiting` event only asks for a fresh read. Cancel asks by
  *   the id and reads Running with Cancel requested until the build stops.
- * - Stopped: nothing runs it (the app closed or the run broke off); the next
- *   start restores the old View or finishes it.
+ *   A status read that failed leaves it Running, with `readFailure` until a
+ *   read succeeds, and the next read goes ahead: it says nothing of how the
+ *   build goes.
+ * - Stopped: nothing runs it; the next start restores the old View or
+ *   finishes it. `error` is why its run broke off; null when the app closed
+ *   during it.
  * - Settled: only `{ ok: true }` with outcome `applied` is a success;
  *   `failed`, `canceled` and every refusal (a stale sheet's `conflict`, a
  *   blocker) are reported as such, never as applied.
  */
 import type { QueryClient } from "@tanstack/react-query"
 import { useSyncExternalStore } from "react"
-import { type ActionResult, type ApplyProgress, type ApplyReport_Serialize, type ApplyRequest, type ApplyStatus_Serialize, type ApplyWaiting, library } from "@/api/ipc"
+import { type ActionResult, type ApplyProgress, type ApplyReport_Serialize, type ApplyRequest, type ApplyStatus_Serialize, type ApplyWaiting, type ErrorResponse, type LibraryFailure, library } from "@/api/ipc"
 import { invalidateProjectReads, projectWrite } from "./queries"
 
 export type ApplyRun =
   | { phase: "starting" }
-  | { phase: "running"; progress: ApplyProgress; cancelRequested: boolean }
-  | { phase: "stopped"; progress: ApplyProgress }
+  | { phase: "running"; progress: ApplyProgress; cancelRequested: boolean; readFailure: LibraryFailure | null }
+  | { phase: "stopped"; progress: ApplyProgress; error: ErrorResponse | null }
   | { phase: "settled"; result: ActionResult<ApplyReport_Serialize> }
 
 /** How often a running Apply's durable status is read. */
@@ -52,25 +56,31 @@ export function useApplyRun(projectId: string): ApplyRun | null {
   return useSyncExternalStore(subscribe, () => runs.get(projectId) ?? null)
 }
 
+/** Read the status again after `APPLY_STATUS_POLL_MS`, replacing any read already scheduled. */
+function poll(projectId: string) {
+  clearTimeout(polls.get(projectId))
+  polls.set(
+    projectId,
+    setTimeout(() => void refresh(projectId), APPLY_STATUS_POLL_MS),
+  )
+}
+
 /** Take in a status read: keep following a running Apply; a settled one re-reads the Project. */
 function follow(projectId: string, status: ApplyStatus_Serialize) {
-  clearTimeout(polls.get(projectId))
-  polls.delete(projectId)
   if (status.state === "running") {
-    set(projectId, { phase: "running", progress: status.progress, cancelRequested: status.cancelRequested })
-    polls.set(
-      projectId,
-      setTimeout(() => void refresh(projectId), APPLY_STATUS_POLL_MS),
-    )
+    set(projectId, { phase: "running", progress: status.progress, cancelRequested: status.cancelRequested, readFailure: null })
+    poll(projectId)
     return
   }
-  set(projectId, status.state === "stopped" ? { phase: "stopped", progress: status.progress } : { phase: "settled", result: { ok: true, data: status.report } })
+  clearTimeout(polls.get(projectId))
+  polls.delete(projectId)
+  set(projectId, status.state === "stopped" ? { phase: "stopped", progress: status.progress, error: status.error } : { phase: "settled", result: { ok: true, data: status.report } })
   const client = clients.get(projectId)
   clients.delete(projectId)
   if (client) void invalidateProjectReads(client)
 }
 
-/** Read the running Apply's durable status now; a failed read is reported, never taken for an outcome. */
+/** Read the running Apply's durable status now. A failed read is shown beside Cancel and read again, never taken for an outcome: the build goes on. */
 async function refresh(projectId: string) {
   const run = runs.get(projectId)
   if (run?.phase !== "running") return
@@ -79,7 +89,10 @@ async function refresh(projectId: string) {
   const now = runs.get(projectId)
   if (now?.phase !== "running" || now.progress.operationId !== run.progress.operationId) return
   if (result.ok) follow(projectId, result.data)
-  else set(projectId, { phase: "settled", result })
+  else {
+    set(projectId, { ...now, readFailure: result.failure })
+    poll(projectId)
+  }
 }
 
 /** Start the Apply the sheet reviewed: its revision, basis digest and ticked files, exactly as the sheet read them. */

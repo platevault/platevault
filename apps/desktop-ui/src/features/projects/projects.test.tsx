@@ -114,7 +114,7 @@ describe("Apply run", () => {
     render(<Probe />)
     act(() => startApply(client, { projectId: PROJECT, desiredRevision: 4, basisDigest: "digest-a", ticked: [] }))
     await waitFor(() => expect(seen?.phase).toBe("running"))
-    expect(seen).toEqual({ phase: "running", progress: running.progress, cancelRequested: false })
+    expect(seen).toEqual({ phase: "running", progress: running.progress, cancelRequested: false, readFailure: null })
     await waitFor(() => expect(seen?.phase).toBe("settled"), { timeout: 3_000 })
     const settled = seen as unknown as { phase: "settled"; result: { ok: true; data: ApplyReport_Serialize } }
     expect(settled.result.ok).toBe(true)

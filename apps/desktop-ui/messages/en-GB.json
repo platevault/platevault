@@ -7460,6 +7460,8 @@
   "view_apply_applied": "View applied",
   "view_apply_canceled": "Apply cancelled",
   "view_apply_unsettled": "PlateVault closed during Apply: the next start settles it",
+  "view_apply_broke_off": "Apply stopped on an error: the next start settles it",
+  "view_apply_status_unread": "Apply goes on, but its progress couldn't be read. Reading it again.",
   "view_apply_foreign_moved": [
     {
       "declarations": [

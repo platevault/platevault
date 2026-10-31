@@ -336,7 +336,7 @@ pub enum RetryAction {
 /// The IPC form of a [`LibraryError`]: its stable code plus the structured
 /// params the client words it with. No English text crosses IPC; the client
 /// shows the catalogue message for `code`.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
 pub struct ErrorResponse {

@@ -15,9 +15,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    ApplyOutcome, ApplyPhase, EntryEvidence, EntryPlacement, EntrySource, ForeignItem,
-    InputBehavior, InputKind, ItemReason, NativePath, PinHealth, PreviousItem, ProjectLifecycle,
-    ProjectOperationKind, ReasonCode, Revision, SessionReadiness, ViewMode,
+    ApplyOutcome, ApplyPhase, EntryEvidence, EntryPlacement, EntrySource, ErrorResponse,
+    ForeignItem, InputBehavior, InputKind, ItemReason, NativePath, PinHealth, PreviousItem,
+    ProjectLifecycle, ProjectOperationKind, ReasonCode, Revision, SessionReadiness, ViewMode,
 };
 
 /// One reason Apply can't run now. The sheet lists every one; Apply refuses
@@ -436,9 +436,11 @@ pub struct ApplyProgress {
 pub enum ApplyStatus {
     /// This process runs it; `cancel_requested` once Cancel asked it to stop.
     Running { progress: ApplyProgress, cancel_requested: bool },
-    /// Unsettled with nothing running it: `PlateVault` closed or the run
-    /// broke off; the next start restores the old View or finishes it.
-    Stopped { progress: ApplyProgress },
+    /// Unsettled with nothing running it, so the Project stays reserved
+    /// until the next start restores the old View or finishes it. `error`
+    /// is why its run broke off in this process; `None` when no run in this
+    /// process reported one, as when `PlateVault` closed during it.
+    Stopped { progress: ApplyProgress, error: Option<ErrorResponse> },
     /// It ended, with the report it settled with.
     Settled { report: ApplyReport },
 }

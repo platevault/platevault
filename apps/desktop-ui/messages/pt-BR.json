@@ -7988,6 +7988,8 @@
   "view_apply_applied": "View aplicada",
   "view_apply_canceled": "Aplicação cancelada",
   "view_apply_unsettled": "O PlateVault fechou durante a aplicação: a próxima abertura a conclui",
+  "view_apply_broke_off": "A aplicação parou por um erro: a próxima abertura a conclui",
+  "view_apply_status_unread": "A aplicação continua, mas o andamento não pôde ser lido. Lendo de novo.",
   "view_apply_foreign_moved": [
     {
       "declarations": [

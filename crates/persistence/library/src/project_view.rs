@@ -122,11 +122,13 @@ pub struct ApplyReservation<'a> {
 }
 
 /// The reserved Apply: its Project operation, which is also its journal's
-/// key, the manifest generation it builds and the basis it recorded.
+/// key, the manifest generation it builds and when it reserved the Project
+/// (RFC 3339, UTC).
 #[derive(Clone, Debug)]
 pub struct ApplyReserved {
     pub operation_id: Uuid,
     pub generation: Revision,
+    pub reserved_at: String,
 }
 
 /// One kept file's move from `View (previous)/` to `View (kept)/` (D-W110),
@@ -1430,7 +1432,7 @@ async fn reserve(
     .bind(&at)
     .execute(&mut *conn)
     .await?;
-    Ok(ApplyReserved { operation_id: operation.id, generation })
+    Ok(ApplyReserved { operation_id: operation.id, generation, reserved_at: operation.reserved_at })
 }
 
 async fn advance(
