@@ -43,16 +43,17 @@
 pub(crate) mod files;
 mod plan;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use persistence_library::{ApplyInputs, ApplyReservation, KeptMove};
+use persistence_library::{ApplyInputs, ApplyRecord, ApplyReservation, KeptMove};
 use uuid::Uuid;
 
-use self::files::{Aside, Ours, PlannedPatch, Rename};
+use self::files::{Aside, Attempt, Ours, PlannedPatch, Rename};
 use self::plan::{Plan, PlanEntry, PlanInput};
 use crate::custody::trash::{self, OsTrash, Retirement};
 use crate::custody::{observe_entry, same_identity, transfer};
@@ -63,11 +64,12 @@ use crate::layout::{
 use crate::library::{blocking, Library};
 use crate::patched_copy::{self, HeaderPatch};
 use crate::{
-    ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview, ApplyReport,
-    ApplyRequest, ApplyStop, EntryEvidence, EntryPlacement, ExpectedTree, FileIdentity,
-    ForeignFile, ForeignItem, ForeignItemFailure, ForeignItemState, InputKind, ItemReason,
-    LibraryError, ManifestEntry, NativePath, PinHealth, PreviousItem, PreviousItemReview, Profile,
-    ReasonCode, Revision, SymlinkCapability, ViewFootprint, ViewManifest, ViewMode, ViewPlanEntry,
+    ApplyBlocker, ApplyFailure, ApplyJournal, ApplyOutcome, ApplyPhase, ApplyPreview,
+    ApplyProgress, ApplyReport, ApplyRequest, ApplyStatus, ApplyStop, EntryEvidence,
+    EntryPlacement, ErrorResponse, ExpectedTree, FileIdentity, ForeignFile, ForeignItem,
+    ForeignItemFailure, ForeignItemState, InputKind, ItemReason, LibraryError, ManifestEntry,
+    NativePath, PinHealth, PreviousItem, PreviousItemReview, Profile, ReasonCode, Revision,
+    SymlinkCapability, ViewFootprint, ViewManifest, ViewMode, ViewPlanEntry,
 };
 
 /// What Apply asks while it runs (PREP-FR-09, PREP-FR-18).
@@ -76,8 +78,9 @@ pub trait ApplyControl: Send + Sync {
     /// other question; every later one is about this operation.
     fn reserved(&self, _operation_id: Uuid) {}
 
-    /// The user chose Cancel: stop where it is safe. Once the new View is
-    /// being installed, Apply finishes instead.
+    /// The caller's own Cancel: stop where it is safe. Once the new View is
+    /// being installed, Apply finishes instead. [`Library::cancel_apply`]
+    /// cancels a running Apply the same way, whatever this answers.
     fn canceled(&self) -> bool {
         false
     }
@@ -98,6 +101,84 @@ pub trait ApplyControl: Send + Sync {
 pub struct Unattended;
 
 impl ApplyControl for Unattended {}
+
+/// What this process knows of one Apply it ran: running now, with whether
+/// Cancel asked it to stop, or broken off with the error its run returned.
+/// An unsettled Apply missing here reads Stopped with no error: nothing in
+/// this process runs it or said why it stopped, as when `PlateVault` closed
+/// during it.
+enum Ran {
+    Running(Arc<AtomicBool>),
+    BrokeOff(ErrorResponse),
+}
+
+/// The Applies this process ran. A broken-off one stays for the rest of the
+/// process: while its journal is unsettled, its status reads Stopped with
+/// why, until the next start settles it.
+static RAN: LazyLock<Mutex<HashMap<Uuid, Ran>>> = LazyLock::new(Mutex::default);
+
+/// Recovers from poisoning: a run that panicked must leave the registry
+/// usable, and a panicking `Drop` would abort.
+fn ran() -> MutexGuard<'static, HashMap<Uuid, Ran>> {
+    RAN.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// This process's claim on one Apply, from the commit of its reservation
+/// until its run returns: while held, the Apply reads Running and Cancel
+/// reaches it.
+struct Claim {
+    operation_id: Uuid,
+    cancel: Arc<AtomicBool>,
+}
+
+impl Claim {
+    fn take(operation_id: Uuid) -> Self {
+        let cancel = Arc::new(AtomicBool::new(false));
+        ran().insert(operation_id, Ran::Running(Arc::clone(&cancel)));
+        Self { operation_id, cancel }
+    }
+
+    /// The run returned `error`: while its journal stays unsettled, the
+    /// Apply reads Stopped with it. Replaced in one step, so no status read
+    /// sees it Stopped without its error.
+    fn broke_off(&self, error: ErrorResponse) {
+        ran().insert(self.operation_id, Ran::BrokeOff(error));
+    }
+}
+
+impl Drop for Claim {
+    fn drop(&mut self) {
+        let mut ran = ran();
+        if matches!(ran.get(&self.operation_id), Some(Ran::Running(_))) {
+            ran.remove(&self.operation_id);
+        }
+    }
+}
+
+/// The control a claimed Apply runs under: the caller's, canceled too once
+/// [`Library::cancel_apply`] asked.
+struct Claimed<'a> {
+    control: &'a dyn ApplyControl,
+    cancel: &'a AtomicBool,
+}
+
+impl ApplyControl for Claimed<'_> {
+    fn reserved(&self, operation_id: Uuid) {
+        self.control.reserved(operation_id);
+    }
+
+    fn canceled(&self) -> bool {
+        self.cancel.load(Ordering::Acquire) || self.control.canceled()
+    }
+
+    fn interrupted(&self, phase: ApplyPhase) -> bool {
+        self.control.interrupted(phase)
+    }
+
+    fn waiting(&self, held: Option<&Path>) {
+        self.control.waiting(held);
+    }
+}
 
 /// How often Apply retries moving a View a tool holds a file in.
 const RELEASE_POLL: Duration = Duration::from_millis(500);
@@ -218,8 +299,10 @@ impl Library {
         blocking(move || Ok(preview(&inputs, Os::SYSTEM))).await
     }
 
-    /// Apply the reviewed sheet: rebuild the View from the originals, swap
-    /// it in and retire the old one (PREP-FR-06/09).
+    /// Apply the reviewed sheet in the caller's task, to its settlement:
+    /// rebuild the View from the originals, swap it in and retire the old
+    /// one (PREP-FR-06/09). [`Self::start_apply`] runs the same Apply in
+    /// the background instead.
     ///
     /// # Errors
     /// `Conflict` when the Project or the Library moved since the sheet;
@@ -239,6 +322,90 @@ impl Library {
         control: &dyn ApplyControl,
     ) -> Result<ApplyReport, LibraryError> {
         self.apply_with(request, control, Os::SYSTEM).await
+    }
+
+    /// Start the reviewed Apply (PREP-FR-09): return as soon as its
+    /// reservation committed, Running with its operation id, while it runs
+    /// on in the background to its settlement, which [`Self::apply_status`]
+    /// reads and [`Self::cancel_apply`] can ask for early.
+    ///
+    /// # Errors
+    /// As [`Self::apply`], for whatever refuses it before it reserves the
+    /// Project; once reserved it returns Running. A run that breaks off
+    /// unsettled reads Stopped with its error, keeping the Project reserved
+    /// for the next start to settle.
+    pub async fn start_apply(
+        self: &Arc<Self>,
+        request: &ApplyRequest,
+        control: Arc<dyn ApplyControl>,
+    ) -> Result<ApplyStatus, LibraryError> {
+        let mut started = self.reserve(request, control.as_ref(), Os::SYSTEM).await?;
+        // Read from the reservation, never the catalog: once the run is
+        // spawned, nothing may turn the start into an error.
+        let status = ApplyStatus::Running {
+            progress: ApplyProgress {
+                operation_id: started.journal.operation_id,
+                project_id: started.journal.project_id,
+                phase: started.journal.phase,
+                started_at: std::mem::take(&mut started.reserved_at),
+                waiting: None,
+            },
+            cancel_requested: false,
+        };
+        let operation_id = started.journal.operation_id;
+        let library = Arc::clone(self);
+        tokio::spawn(async move {
+            if let Err(error) = library.run(started, control.as_ref(), Os::SYSTEM).await {
+                tracing::error!(
+                    %operation_id,
+                    %error,
+                    "Apply broke off unsettled; the next start settles it"
+                );
+            }
+        });
+        Ok(status)
+    }
+
+    /// The durable state of Apply `operation_id` (PREP-FR-09/18): Running
+    /// while this process runs it, with where its journal stands and its
+    /// wait for a tool; Stopped when it is unsettled with nothing running
+    /// it, with the error its run broke off with in this process; Settled
+    /// with the report it settled with.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Apply; catalog errors.
+    pub async fn apply_status(&self, operation_id: Uuid) -> Result<ApplyStatus, LibraryError> {
+        // Read before the journal: a claim is released only once its run
+        // returned, so a claim seen here with an unsettled journal read
+        // after it means the run is still going.
+        let here = ran().get(&operation_id).map(|ran| match ran {
+            Ran::Running(cancel) => Ok(cancel.load(Ordering::Acquire)),
+            Ran::BrokeOff(error) => Err(error.clone()),
+        });
+        Ok(match self.catalog().apply_record(operation_id).await? {
+            ApplyRecord::Settled(report) => ApplyStatus::Settled { report },
+            ApplyRecord::Unsettled(progress) => match here {
+                Some(Ok(cancel_requested)) => ApplyStatus::Running { progress, cancel_requested },
+                Some(Err(error)) => ApplyStatus::Stopped { progress, error: Some(error) },
+                None => ApplyStatus::Stopped { progress, error: None },
+            },
+        })
+    }
+
+    /// Ask the Apply `operation_id` this process runs to stop where it is
+    /// safe (PREP-FR-09/18): it keeps the old View, or finishes once the new
+    /// View is being installed. Returns its status, never an outcome of its
+    /// own: Running with Cancel requested until it stopped, then Settled
+    /// with the report that says how it ended. An Apply that settled or
+    /// that nothing runs is left as it is.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Apply; catalog errors.
+    pub async fn cancel_apply(&self, operation_id: Uuid) -> Result<ApplyStatus, LibraryError> {
+        if let Some(Ran::Running(cancel)) = ran().get(&operation_id) {
+            cancel.store(true, Ordering::Release);
+        }
+        self.apply_status(operation_id).await
     }
 
     /// Finish or roll back every Apply an earlier run of `PlateVault` left
@@ -339,6 +506,18 @@ impl Library {
         control: &dyn ApplyControl,
         os: Os,
     ) -> Result<ApplyReport, LibraryError> {
+        let started = self.reserve(request, control, os).await?;
+        self.run(started, control, os).await
+    }
+
+    /// Check the reviewed sheet and reserve the Project for its Apply,
+    /// claimed by this process from the moment the reservation commits.
+    async fn reserve(
+        &self,
+        request: &ApplyRequest,
+        control: &dyn ApplyControl,
+        os: Os,
+    ) -> Result<Started, LibraryError> {
         let inputs = self.catalog().apply_inputs(request.project_id).await?;
         if inputs.desired_revision != request.desired_revision
             || inputs.basis_digest != request.basis_digest
@@ -373,6 +552,7 @@ impl Library {
                 previous_gone,
             })
             .await?;
+        let claim = Claim::take(reserved.operation_id);
         control.reserved(reserved.operation_id);
         let journal = ApplyJournal {
             operation_id: reserved.operation_id,
@@ -386,9 +566,32 @@ impl Library {
         };
         let ticked: BTreeSet<PathBuf> =
             request.ticked.iter().filter_map(|path| path.relative_path().ok()).collect();
+        Ok(Started {
+            claim,
+            reserved_at: reserved.reserved_at,
+            journal,
+            project,
+            inputs,
+            plan,
+            ticked,
+            kept_missing,
+        })
+    }
+
+    /// Build, verify, swap and settle a reserved Apply; its claim ends as
+    /// this returns, with the error it broke off with, if any.
+    async fn run(
+        &self,
+        started: Started,
+        control: &dyn ApplyControl,
+        os: Os,
+    ) -> Result<ApplyReport, LibraryError> {
+        let Started { claim, journal, project, inputs, plan, ticked, kept_missing, .. } = started;
+        let control = Claimed { control, cancel: &claim.cancel };
+        let project_id = journal.project_id;
         let mut run = Run {
             library: self,
-            control,
+            control: &control,
             os,
             journal,
             project,
@@ -400,12 +603,19 @@ impl Library {
             building_made: false,
             kept_missing,
         };
-        // What the reservation left, which the swap reads again (plan §3).
-        let after = self.catalog().apply_inputs(request.project_id).await?;
-        let Some(reserved) = Reserved::of(&run.inputs, &after) else {
-            return run.end(ApplyStop::CatalogMoved).await;
-        };
-        run.build(plan, &ticked, &reserved).await
+        let ended = async {
+            // What the reservation left, which the swap reads again (plan §3).
+            let after = self.catalog().apply_inputs(project_id).await?;
+            let Some(reserved) = Reserved::of(&run.inputs, &after) else {
+                return run.end(ApplyStop::CatalogMoved).await;
+            };
+            run.build(plan, &ticked, &reserved).await
+        }
+        .await;
+        if let Err(error) = &ended {
+            claim.broke_off(error.response(Some(project_id), None));
+        }
+        ended
     }
 
     /// Recover one unsettled Apply after a restart.
@@ -1179,6 +1389,20 @@ impl Delivered {
     }
 }
 
+/// An Apply whose reservation committed, claimed by this process, with
+/// what its run builds.
+struct Started {
+    claim: Claim,
+    /// When the reservation committed (RFC 3339, UTC).
+    reserved_at: String,
+    journal: ApplyJournal,
+    project: PathBuf,
+    inputs: Arc<ApplyInputs>,
+    plan: Plan,
+    ticked: BTreeSet<PathBuf>,
+    kept_missing: Vec<NativePath>,
+}
+
 /// The catalog state one Apply builds against, read right after its
 /// reservation, which the swap reads again (plan §3): any desired-state
 /// edit moves the Project revision, and any global change the basis
@@ -1313,8 +1537,9 @@ impl Run<'_> {
             blocking(move || Ok(files::clear_building(&building, &ours))).await?;
         }
         self.journal.stop = Some(stop);
-        self.library.catalog().discard_apply(&self.journal, stop, &self.built).await?;
-        Ok(self.report(Some(outcome), Vec::new(), Vec::new(), Delivered::default()))
+        let report = self.report(Some(outcome), Vec::new(), Vec::new(), Delivered::default());
+        self.library.catalog().discard_apply(&self.journal, &self.built, &report).await?;
+        Ok(report)
     }
 
     async fn cancel(&mut self) -> Result<ApplyReport, LibraryError> {
@@ -1587,19 +1812,8 @@ impl Run<'_> {
             if let Err(stop) = ready {
                 return self.end(stop).await;
             }
-            match files::move_aside(self.os.rename, self.os.poll, &view, &previous, self.control)
-                .await
-            {
-                Aside::Moved { waited } => {
-                    if waited {
-                        if let Some(report) = self.after_wait(reserved).await? {
-                            return Ok(report);
-                        }
-                    }
-                    self.advance(ApplyPhase::OldMoved, None).await?;
-                }
-                Aside::Canceled => return self.cancel().await,
-                Aside::Failed => return self.end(ApplyStop::AsideFailed).await,
+            if let Some(report) = self.set_old_view_aside(reserved, &view, &previous).await? {
+                return Ok(report);
             }
             if let Some(report) = self.interrupted() {
                 return Ok(report);
@@ -1627,15 +1841,58 @@ impl Run<'_> {
         self.finish_installed().await
     }
 
-    /// After waiting for a tool, with the old View aside: record the wait,
-    /// and when the catalog moved meanwhile put the old View back and end
-    /// Failed.
+    /// Move the old View aside (PREP-FR-18), recording the phase it reached;
+    /// the report when Apply ended there instead: canceled while it waited,
+    /// refused by the OS, or the catalog moved while it waited.
+    async fn set_old_view_aside(
+        &mut self,
+        reserved: &Reserved,
+        view: &Path,
+        previous: &Path,
+    ) -> Result<Option<ApplyReport>, LibraryError> {
+        let (aside, waited) = self.move_old_view_aside(view, previous).await?;
+        let stopped = match aside {
+            Aside::Moved if waited => self.after_wait(reserved).await,
+            Aside::Moved => self.advance(ApplyPhase::OldMoved, None).await.map(|()| None),
+            Aside::Canceled => self.cancel().await.map(Some),
+            Aside::Failed => self.end(ApplyStop::AsideFailed).await.map(Some),
+        };
+        // The write above ended the recorded wait, whichever way it went.
+        if waited {
+            self.control.waiting(None);
+        }
+        stopped
+    }
+
+    /// One attempt to move the old View aside; while a tool holds a file in
+    /// it, the journal records the wait, the control hears of it, and Apply
+    /// retries until the file is released or Cancel. Whether it waited.
+    async fn move_old_view_aside(
+        &self,
+        view: &Path,
+        previous: &Path,
+    ) -> Result<(Aside, bool), LibraryError> {
+        if let Attempt::Ended(aside) = files::move_aside(self.os.rename, view, previous).await {
+            return Ok((aside, false));
+        }
+        let held = NativePath::from_path(view);
+        self.library.catalog().record_apply_wait(self.journal.operation_id, &held).await?;
+        self.control.waiting(Some(view));
+        let aside =
+            files::wait_aside(self.os.rename, self.os.poll, view, previous, self.control).await;
+        Ok((aside, true))
+    }
+
+    /// After waiting for a tool, with the old View aside: record the wait's
+    /// end and the phase in one write, then, when the catalog moved
+    /// meanwhile, put the old View back and end Failed.
     async fn after_wait(
         &mut self,
         reserved: &Reserved,
     ) -> Result<Option<ApplyReport>, LibraryError> {
         self.advance(ApplyPhase::WaitingForRelease, None).await?;
         if self.still_reserved(reserved).await? {
+            self.advance(ApplyPhase::OldMoved, None).await?;
             return Ok(None);
         }
         if let Err(restore) = self.restore_old_view().await? {
@@ -1945,8 +2202,9 @@ impl Run<'_> {
             .map(Delivered::of)
             .unwrap_or_default();
         let Some(old) = inputs.previous.clone() else {
-            catalog.settle_apply(&self.journal, &[], true).await?;
-            return Ok(self.report(Some(ApplyOutcome::Applied), foreign, Vec::new(), delivered));
+            let report = self.report(Some(ApplyOutcome::Applied), foreign, Vec::new(), delivered);
+            catalog.settle_apply(&self.journal, &[], true, &report).await?;
+            return Ok(report);
         };
         if before(self.journal.phase, ApplyPhase::RetiringPrevious) {
             self.advance(ApplyPhase::RetiringPrevious, None).await?;
@@ -1957,8 +2215,10 @@ impl Run<'_> {
         let sources = files::Original::all(&inputs);
         let project = self.project.clone();
         let retired = blocking(move || Ok(files::retire(&project, &old.entries, &sources))).await?;
-        catalog.settle_apply(&self.journal, &retired.leftovers, retired.gone).await?;
-        Ok(self.report(Some(ApplyOutcome::Applied), foreign, retired.leftovers, delivered))
+        let report =
+            self.report(Some(ApplyOutcome::Applied), foreign, retired.leftovers, delivered);
+        catalog.settle_apply(&self.journal, &report.leftovers, retired.gone, &report).await?;
+        Ok(report)
     }
 }
 

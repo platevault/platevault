@@ -18,12 +18,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use platevault_model::{
-    ApplyJournal, ApplyOutcome, ApplyPhase, ApplyStop, Asset, Availability, BasisCapture,
-    BasisGroup, BasisSession, CaptureKey, CaptureMetadata, CopyBasis, EntryEvidence, EntryInput,
-    EntryName, EntryPlacement, EntrySource, ExpectedTree, FileIdentity, ForeignItem, GroupKeywords,
-    GroupName, ImageFormat, InputKind, InputRef, LibraryError, Location, ManifestEntry,
-    ManifestState, NativePath, PreviousItem, PreviousItemReason, PreviousItemReview, Profile,
-    ProjectBasis, ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision,
+    ApplyJournal, ApplyPhase, ApplyProgress, ApplyReport, ApplyWait, Asset, Availability,
+    BasisCapture, BasisGroup, BasisSession, CaptureKey, CaptureMetadata, CopyBasis, EntryEvidence,
+    EntryInput, EntryName, EntryPlacement, EntrySource, ExpectedTree, FileIdentity, ForeignItem,
+    GroupKeywords, GroupName, ImageFormat, InputKind, InputRef, LibraryError, Location,
+    ManifestEntry, ManifestState, NativePath, PreviousItem, PreviousItemReason, PreviousItemReview,
+    Profile, ProjectBasis, ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision,
     SessionPlacement, SessionReadiness, SettledPin, ViewManifest, ViewMode, WorkflowSettings,
 };
 use serde::Serialize;
@@ -122,11 +122,13 @@ pub struct ApplyReservation<'a> {
 }
 
 /// The reserved Apply: its Project operation, which is also its journal's
-/// key, the manifest generation it builds and the basis it recorded.
+/// key, the manifest generation it builds and when it reserved the Project
+/// (RFC 3339, UTC).
 #[derive(Clone, Debug)]
 pub struct ApplyReserved {
     pub operation_id: Uuid,
     pub generation: Revision,
+    pub reserved_at: String,
 }
 
 /// One kept file's move from `View (previous)/` to `View (kept)/` (D-W110),
@@ -139,6 +141,13 @@ pub struct KeptMove {
     pub kept: NativePath,
     /// What leaves, read below `View (previous)/` right before the move.
     pub evidence: EntryEvidence,
+}
+
+/// One Apply as its journal records it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ApplyRecord {
+    Unsettled(ApplyProgress),
+    Settled(ApplyReport),
 }
 
 impl Catalog {
@@ -207,16 +216,16 @@ impl Catalog {
     }
 
     /// End an Apply that never installed its View: record what it wrote, if
-    /// anything, discard its manifest, settle its journal Failed or Canceled,
-    /// as `stop` says, with that reason, and release the Project.
+    /// anything, discard its manifest, settle its journal Failed or Canceled
+    /// with `report`, whose stop says which and why, and release the Project.
     ///
     /// # Errors
     /// `PersistenceFailure` when the journal is past `NewInstalled`.
     pub async fn discard_apply(
         &self,
         journal: &ApplyJournal,
-        stop: ApplyStop,
         entries: &[ManifestEntry],
+        report: &ApplyReport,
     ) -> Result<()> {
         write_txn!(self, |conn| {
             let built: i64 = sqlx::query_scalar(
@@ -232,7 +241,7 @@ impl Catalog {
             }
             set_manifest_state(conn, journal.project_id, journal.generation, "discarded", None)
                 .await?;
-            settle_journal(conn, journal.operation_id, stop.outcome(), Some(stop)).await?;
+            settle_journal(conn, report).await?;
             project_operations::settle_operation(conn, journal.operation_id).await?;
         });
         Ok(())
@@ -414,9 +423,9 @@ impl Catalog {
         Ok(())
     }
 
-    /// Settle an installed Apply Applied: record what `View (previous)/`
-    /// still holds for review, retire the previous manifest when its folder
-    /// is gone, and release the Project.
+    /// Settle an installed Apply Applied with `report`: record what
+    /// `View (previous)/` still holds for review, retire the previous
+    /// manifest when its folder is gone, and release the Project.
     ///
     /// # Errors
     /// `PersistenceFailure` for a record the schema refuses.
@@ -425,6 +434,7 @@ impl Catalog {
         journal: &ApplyJournal,
         leftovers: &[PreviousItem],
         previous_gone: bool,
+        report: &ApplyReport,
     ) -> Result<()> {
         write_txn!(self, |conn| {
             let project = journal.project_id.to_string();
@@ -455,7 +465,7 @@ impl Catalog {
                 .execute(&mut *conn)
                 .await?;
             }
-            settle_journal(conn, journal.operation_id, ApplyOutcome::Applied, None).await?;
+            settle_journal(conn, report).await?;
             project_operations::settle_operation(conn, journal.operation_id).await?;
         });
         Ok(())
@@ -486,6 +496,70 @@ impl Catalog {
     pub async fn apply_journal(&self, operation_id: Uuid) -> Result<ApplyJournal> {
         let mut conn = self.reader().await?;
         read_journal(&mut conn, operation_id).await
+    }
+
+    /// Record that the `BuildVerified` Apply `operation_id` waits for a tool
+    /// holding a file in `held` (PREP-FR-18), from now; the wait it records.
+    ///
+    /// # Errors
+    /// `NotFound` unless `operation_id` is an Apply at `BuildVerified`.
+    pub async fn record_apply_wait(
+        &self,
+        operation_id: Uuid,
+        held: &NativePath,
+    ) -> Result<ApplyWait> {
+        let wait = ApplyWait { held: held.clone(), since: now()? };
+        let updated = write_txn!(self, |conn| {
+            sqlx::query(
+                "UPDATE apply_operations SET waiting_held = ?2, waiting_since = ?3, \
+                 updated_at = ?3 WHERE operation_id = ?1 AND phase = 'build_verified'",
+            )
+            .bind(operation_id.to_string())
+            .bind(to_json(&wait.held)?)
+            .bind(&wait.since)
+            .execute(&mut *conn)
+            .await?
+        });
+        if updated.rows_affected() == 1 {
+            Ok(wait)
+        } else {
+            Err(LibraryError::NotFound(format!("Apply {operation_id} at build_verified")))
+        }
+    }
+
+    /// One Apply as its journal records it: where it stands while unsettled,
+    /// with its wait for a tool, or the report it settled with.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Apply; `PersistenceFailure` for a corrupt
+    /// record.
+    pub async fn apply_record(&self, operation_id: Uuid) -> Result<ApplyRecord> {
+        let mut conn = self.reader().await?;
+        let row = sqlx::query(
+            "SELECT a.project_id, a.phase, a.waiting_held, a.waiting_since, a.report, \
+             o.reserved_at FROM apply_operations a \
+             JOIN project_operations o ON o.id = a.operation_id WHERE a.operation_id = ?1",
+        )
+        .bind(operation_id.to_string())
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(|| LibraryError::NotFound(format!("Apply {operation_id}")))?;
+        if let Some(report) = row.try_get::<Option<String>, _>("report")? {
+            return Ok(ApplyRecord::Settled(from_json(&report)?));
+        }
+        let held: Option<String> = row.try_get("waiting_held")?;
+        let since: Option<String> = row.try_get("waiting_since")?;
+        let waiting = match held.zip(since) {
+            Some((held, since)) => Some(ApplyWait { held: from_json(&held)?, since }),
+            None => None,
+        };
+        Ok(ApplyRecord::Unsettled(ApplyProgress {
+            operation_id,
+            project_id: parse_uuid(&row.try_get::<String, _>("project_id")?)?,
+            phase: from_text(&row.try_get::<String, _>("phase")?)?,
+            started_at: row.try_get("reserved_at")?,
+            waiting,
+        }))
     }
 
     /// The Project's latest Apply journal, settled or not: the one with the
@@ -1358,7 +1432,7 @@ async fn reserve(
     .bind(&at)
     .execute(&mut *conn)
     .await?;
-    Ok(ApplyReserved { operation_id: operation.id, generation })
+    Ok(ApplyReserved { operation_id: operation.id, generation, reserved_at: operation.reserved_at })
 }
 
 async fn advance(
@@ -1368,9 +1442,10 @@ async fn advance(
     expected: Option<&ExpectedTree>,
 ) -> Result<()> {
     let expected = expected.map(to_json).transpose()?;
+    // Moving the phase on ends any wait for a tool, which only `BuildVerified` holds.
     let updated = sqlx::query(
         "UPDATE apply_operations SET phase = ?2, expected = coalesce(?3, expected), \
-         updated_at = ?4 WHERE operation_id = ?1",
+         waiting_held = NULL, waiting_since = NULL, updated_at = ?4 WHERE operation_id = ?1",
     )
     .bind(operation_id.to_string())
     .bind(to_text(&phase)?)
@@ -1385,19 +1460,24 @@ async fn advance(
     }
 }
 
-async fn settle_journal(
-    conn: &mut SqliteConnection,
-    operation_id: Uuid,
-    outcome: ApplyOutcome,
-    stop: Option<ApplyStop>,
-) -> Result<()> {
+/// Settle the journal of `report`'s Apply with its outcome, its stop and the
+/// report itself, in one write: ending it ends any wait for a tool too.
+async fn settle_journal(conn: &mut SqliteConnection, report: &ApplyReport) -> Result<()> {
+    let outcome = report.outcome.ok_or_else(|| {
+        LibraryError::PersistenceFailure(format!(
+            "Apply {} settles only with an outcome",
+            report.operation_id
+        ))
+    })?;
     sqlx::query(
         "UPDATE apply_operations SET settled_from = phase, phase = 'settled', outcome = ?2, \
-         stop = ?3, updated_at = ?4 WHERE operation_id = ?1 AND phase <> 'settled'",
+         stop = ?3, report = ?4, waiting_held = NULL, waiting_since = NULL, updated_at = ?5 \
+         WHERE operation_id = ?1 AND phase <> 'settled'",
     )
-    .bind(operation_id.to_string())
+    .bind(report.operation_id.to_string())
     .bind(to_text(&outcome)?)
-    .bind(stop.map(|stop| to_json(&stop)).transpose()?)
+    .bind(report.stop.map(|stop| to_json(&stop)).transpose()?)
+    .bind(to_json(report)?)
     .bind(now()?)
     .execute(&mut *conn)
     .await?;

@@ -79,6 +79,8 @@ impl Shell {
                 desktop_shell::commands::project_inputs::project_set_frames,
                 desktop_shell::commands::project_apply::project_apply_preview,
                 desktop_shell::commands::project_apply::project_apply,
+                desktop_shell::commands::project_apply::project_apply_status,
+                desktop_shell::commands::project_apply::project_apply_cancel,
                 desktop_shell::commands::project_apply::library_check_symlinks,
                 desktop_shell::commands::library_dialogs::library_data_location,
                 desktop_shell::commands::project_output::project_copy_to_output,
@@ -318,7 +320,14 @@ fn apply_family_takes_its_arguments() {
         NOT_FOUND,
         project,
     );
+    // The durable operations contract: an unknown Apply is NotFound, and
+    // Cancel never acknowledges one it can't find.
+    let operation = Uuid::new_v4();
+    let by_id = json!({ "operationId": operation });
+    shell.refuses("project_apply_status", &by_id, NOT_FOUND, operation);
+    shell.refuses("project_apply_cancel", &by_id, NOT_FOUND, operation);
 }
+
 #[test]
 fn project_get_returns_the_current_revision_after_a_write() {
     let shell = Shell::new();

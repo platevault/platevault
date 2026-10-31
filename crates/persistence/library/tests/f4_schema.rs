@@ -320,8 +320,8 @@ async fn a_fresh_catalog_records_the_f4_schema_version_and_tables() {
             .fetch_one(&mut conn)
             .await
             .unwrap();
-    assert_eq!(version, 25);
-    assert_eq!(persistence_library::SCHEMA_VERSION, 25);
+    assert_eq!(version, 26);
+    assert_eq!(persistence_library::SCHEMA_VERSION, 26);
     let tables: Vec<String> =
         sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
             .fetch_all(&mut conn)
@@ -818,7 +818,7 @@ async fn manifests_entries_and_the_apply_journal_hold_their_invariants() {
     ok(
         &mut f4.conn,
         "UPDATE apply_operations SET phase = 'settled', outcome = 'applied', \
-         settled_from = phase WHERE operation_id = ?1",
+         settled_from = phase, report = '{}' WHERE operation_id = ?1",
         &[&apply],
     )
     .await;
@@ -861,6 +861,8 @@ async fn manifests_entries_and_the_apply_journal_hold_their_invariants() {
 /// A settled Failed or Canceled journal records one of the `ApplyStop` codes,
 /// `canceled` exactly when the outcome is Canceled; an unknown code, a stop
 /// without a code and a code that disagrees with the outcome are refused.
+/// A wait for a tool is recorded only at `build_verified`, with when it
+/// began, and a journal settles only with its report.
 #[tokio::test]
 async fn an_apply_journal_stops_with_a_known_code_that_agrees_with_its_outcome() {
     let mut f4 = F4::new().await;
@@ -873,8 +875,27 @@ async fn an_apply_journal_stops_with_a_known_code_that_agrees_with_its_outcome()
         &[&apply, &f4.project, AT],
     )
     .await;
+    let wait = "UPDATE apply_operations SET waiting_held = ?2, waiting_since = ?3 \
+         WHERE operation_id = ?1";
+    let held = r#"{"unix":"/p/View"}"#;
+    refused(&mut f4.conn, wait, &[&apply, held, AT], "CHECK").await;
+    ok(
+        &mut f4.conn,
+        "UPDATE apply_operations SET phase = 'build_verified' WHERE operation_id = ?1",
+        &[&apply],
+    )
+    .await;
+    refused(
+        &mut f4.conn,
+        "UPDATE apply_operations SET waiting_held = ?2 WHERE operation_id = ?1",
+        &[&apply, held],
+        "CHECK",
+    )
+    .await;
+    ok(&mut f4.conn, wait, &[&apply, held, AT]).await;
     let settle = "UPDATE apply_operations SET phase = 'settled', settled_from = phase, \
-         outcome = ?2, stop = ?3 WHERE operation_id = ?1";
+         outcome = ?2, stop = ?3, report = '{}', waiting_held = NULL, waiting_since = NULL \
+         WHERE operation_id = ?1";
     for (outcome, stop) in [
         ("failed", r#"{"code":"made_up"}"#),
         ("failed", r#"{"count":2}"#),
@@ -883,6 +904,16 @@ async fn an_apply_journal_stops_with_a_known_code_that_agrees_with_its_outcome()
     ] {
         refused(&mut f4.conn, settle, &[&apply, outcome, stop], "CHECK").await;
     }
+    let unreported = "UPDATE apply_operations SET phase = 'settled', settled_from = phase, \
+         outcome = 'failed', stop = ?2, waiting_held = NULL, waiting_since = NULL \
+         WHERE operation_id = ?1";
+    refused(
+        &mut f4.conn,
+        unreported,
+        &[&apply, r#"{"code":"view_unreadable","count":2}"#],
+        "CHECK",
+    )
+    .await;
     ok(&mut f4.conn, settle, &[&apply, "failed", r#"{"code":"view_unreadable","count":2}"#]).await;
 }
 

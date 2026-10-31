@@ -181,7 +181,12 @@ BEGIN SELECT RAISE(ABORT, 'a Closed Project is locked'); END;
 -- each effect, moves only forward, and settles once with the outcome that is
 -- true from where it settled. `expected` is `ExpectedTree` JSON; `stop` is
 -- the `ApplyStop` JSON of a Failed or Canceled Apply, one of its codes with
--- its count, and is `canceled` exactly when the outcome is.
+-- its count, and is `canceled` exactly when the outcome is. While Apply
+-- waits for a tool to release a file in View (PREP-FR-18), still
+-- `build_verified`, `waiting_held` is the `NativePath` JSON of the folder a
+-- tool holds and `waiting_since` when the wait began; the write that moves
+-- the phase on clears both. `report` is the `ApplyReport` JSON it settled
+-- with, written by the same write that settles it.
 CREATE TABLE IF NOT EXISTS apply_operations (
     operation_id TEXT PRIMARY KEY NOT NULL,
     project_id TEXT NOT NULL,
@@ -205,6 +210,9 @@ CREATE TABLE IF NOT EXISTS apply_operations (
         'previous_unreadable', 'kept_not_moved', 'project_folder_replaced', 'view_replaced',
         'previous_appeared', 'aside_failed', 'not_installed'
     ))),
+    waiting_held TEXT CHECK (waiting_held IS NULL OR json_valid(waiting_held)),
+    waiting_since TEXT,
+    report TEXT CHECK (report IS NULL OR json_valid(report)),
     updated_at TEXT NOT NULL,
     FOREIGN KEY (project_id, operation_id) REFERENCES project_operations (project_id, id),
     FOREIGN KEY (project_id, generation) REFERENCES view_manifests (project_id, generation),
@@ -218,7 +226,10 @@ CREATE TABLE IF NOT EXISTS apply_operations (
     )),
     CHECK ((stop IS NOT NULL) = (coalesce(outcome, 'applied') <> 'applied')),
     CHECK (stop IS NULL
-        OR (json_extract(stop, '$.code') = 'canceled') = (outcome IS 'canceled'))
+        OR (json_extract(stop, '$.code') = 'canceled') = (outcome IS 'canceled')),
+    CHECK ((waiting_held IS NULL) = (waiting_since IS NULL)),
+    CHECK (waiting_held IS NULL OR phase = 'build_verified'),
+    CHECK ((phase = 'settled') = (report IS NOT NULL))
 ) STRICT;
 -- A Project's latest Apply (Home's Next action, PRJ-FR-18 rule 2): the
 -- highest generation, since every Apply builds a new manifest.

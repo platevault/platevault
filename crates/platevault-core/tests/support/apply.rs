@@ -281,6 +281,41 @@ impl platevault_core::apply::ApplyControl for Recorder {
     }
 }
 
+/// Bounds a wait for something a background Apply must reach; exceeding it
+/// fails the test instead of hanging it.
+pub const PATIENCE: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// Holds a background Apply once `at` is recorded, until the test lets it
+/// go: [`Gate::at`] returns the gate, the receiver that hears it arrive and
+/// the sender that lets it go. Needs a multi-thread runtime.
+pub struct Gate {
+    at: ApplyPhase,
+    arrived: std::sync::mpsc::Sender<()>,
+    release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl Gate {
+    pub fn at(
+        at: ApplyPhase,
+    ) -> (Self, std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+        let (arrived, arrival) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel();
+        (Self { at, arrived, release: std::sync::Mutex::new(released) }, arrival, release)
+    }
+}
+
+impl platevault_core::apply::ApplyControl for Gate {
+    fn interrupted(&self, phase: ApplyPhase) -> bool {
+        if phase == self.at {
+            let _ = self.arrived.send(());
+            let release = self.release.lock().unwrap();
+            tokio::task::block_in_place(|| release.recv_timeout(PATIENCE))
+                .expect("the test lets the Apply go");
+        }
+        false
+    }
+}
+
 pub struct World {
     pub temp: tempfile::TempDir,
     pub db: PathBuf,
@@ -695,6 +730,21 @@ impl World {
 
     pub async fn journal(&self, operation: Uuid) -> ApplyJournal {
         self.catalog().apply_journal(operation).await.unwrap()
+    }
+
+    /// The report Apply `operation` settles with, read from its durable
+    /// status as a client polls it.
+    pub async fn settled(&self, operation: Uuid) -> ApplyReport {
+        let deadline = std::time::Instant::now() + PATIENCE;
+        loop {
+            match self.library.apply_status(operation).await.unwrap() {
+                ApplyStatus::Settled { report } => return report,
+                ApplyStatus::Running { .. } => {}
+                stopped @ ApplyStatus::Stopped { .. } => panic!("it broke off: {stopped:#?}"),
+            }
+            assert!(std::time::Instant::now() < deadline, "Apply {operation} never settled");
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
     }
 }
 

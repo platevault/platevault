@@ -11,13 +11,14 @@
  * shows the latest only on request. Apply stays unavailable while any
  * blocker holds; the sheet lists each with the place it is resolved.
  *
- * A running Apply shows its waiting state and Cancel; a canceled, failed or
- * refused Apply is reported as such and never as applied.
+ * A running Apply shows its waiting state (which folder a tool holds and
+ * since when, from its durable status) and Cancel; a canceled, failed,
+ * stopped or refused Apply is reported as such and never as applied.
  */
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { CopyCheck, FolderOpen, Pencil, Trash2, X } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { type ApplyReport_Serialize, library, type NativePathWire, type PendingChange_Serialize, type PreviousItem_Serialize, type ProjectViewSettings_Serialize, type ViewMode } from "@/api/ipc"
 import { libraryQuery } from "@/api/query"
 import { useMessages } from "@/app/preferences"
@@ -32,13 +33,13 @@ import { BoxTable } from "@/components/app/box"
 import { Refusal } from "@/components/app/refusal"
 import { failureMessage } from "@/components/app/run-result"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
-import { formatBytes, formatCount } from "@/lib/format"
+import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { ApplySheet } from "./apply-sheet"
-import { type ApplyRun, applyOperationFound, cancelApply, dismissApply, useApplyRun } from "./apply-run"
+import { type ApplyRun, cancelApply, dismissApply, useApplyRun } from "./apply-run"
 import { changeSession, changeSource, changeText, sourceText, stopText } from "./apply-words"
 import type { ProjectTabProps } from "./project-page"
-import { applyPreviewQuery, inputsQuery, isLocked, previousItemsQuery, projectWrite } from "./queries"
+import { inputsQuery, isLocked, previousItemsQuery, projectWrite } from "./queries"
 import { modeText, pathText, reasonText } from "./words"
 
 export function ViewTab({ header, chrome, search }: ProjectTabProps) {
@@ -101,29 +102,36 @@ export function ViewTab({ header, chrome, search }: ProjectTabProps) {
 
 function ApplyRunPanel({ projectId, run, onReview }: { projectId: string; run: ApplyRun; onReview: () => void }) {
   const m = useMessages()
-  // While the run has no operation id yet, the sheet's read names it as `operation_running` (Cancel needs it). Polling
-  // stands in for a start acknowledgement carrying the id, which astro-plan-wre19.6 adds.
-  const preview = useQuery({ ...applyPreviewQuery(projectId), enabled: run.phase === "running" && run.operationId === null, refetchInterval: 2000 })
-  const runningId = preview.data?.blockers.flatMap((b) => (b.blocker === "operation_running" && b.kind === "apply" ? [b.operationId] : []))[0] ?? null
-  useEffect(() => {
-    if (runningId) applyOperationFound(projectId, runningId)
-  }, [projectId, runningId])
-  if (run.phase === "running") {
+  if (run.phase === "starting" || run.phase === "running") {
+    const blocked = (reason: string) => ({ action: m.actions_blocked({ action: m.verb_cancel() }), reason, blockers: [] })
+    const canceling = run.phase === "running" && run.cancelRequested
     const cancel: Action = {
       id: "cancel-apply",
       label: m.verb_cancel(),
       icon: X,
       run: () => cancelApply(projectId),
-      unavailable: run.operationId === null ? { action: m.actions_blocked({ action: m.verb_cancel() }), reason: m.view_apply_cancel_not_yet(), blockers: [] } : run.canceling ? { action: m.actions_blocked({ action: m.verb_cancel() }), reason: m.view_apply_canceling(), blockers: [] } : undefined,
+      unavailable: run.phase === "starting" ? blocked(m.view_apply_cancel_not_yet()) : canceling ? blocked(m.view_apply_canceling()) : undefined,
     }
+    const waiting = run.phase === "running" ? run.progress.waiting : null
+    const readFailure = run.phase === "running" ? run.readFailure : null
     return (
-      <Notice tone="info" title={run.canceling ? m.view_apply_canceling() : m.view_apply_running()}>
-        {run.held ? <p>{`${m.project_apply_waiting()}: ${pathText(run.held)}`}</p> : null}
+      <Notice tone="info" title={canceling ? m.view_apply_canceling() : m.view_apply_running()}>
+        {waiting ? <p>{m.project_apply_waiting({ time: formatDateTime(waiting.since), path: pathText(waiting.held) })}</p> : null}
+        {readFailure ? <p>{`${m.view_apply_status_unread()} ${failureMessage(m, readFailure)}`}</p> : null}
         <ActionButton action={cancel} />
       </Notice>
     )
   }
   const dismiss: Action = { id: "dismiss-apply", label: m.verb_close(), run: () => dismissApply(projectId) }
+  if (run.phase === "stopped") {
+    // Broken off on an error in this session, or stopped by the app closing during it: each says so, never the other.
+    return (
+      <Notice tone="warning" title={run.error ? m.view_apply_broke_off() : m.view_apply_unsettled()}>
+        {run.error ? <p>{failureMessage(m, { source: "library", command: "projectApply", error: run.error })}</p> : null}
+        <ActionButton action={dismiss} />
+      </Notice>
+    )
+  }
   if (!run.result.ok) {
     const review: Action = {
       id: "review-apply",

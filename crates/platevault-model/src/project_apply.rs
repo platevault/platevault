@@ -15,9 +15,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    ApplyOutcome, EntryEvidence, EntryPlacement, EntrySource, ForeignItem, InputBehavior,
-    InputKind, ItemReason, NativePath, PinHealth, PreviousItem, ProjectLifecycle,
-    ProjectOperationKind, ReasonCode, Revision, SessionReadiness, ViewMode,
+    ApplyOutcome, ApplyPhase, EntryEvidence, EntryPlacement, EntrySource, ErrorResponse,
+    ForeignItem, InputBehavior, InputKind, ItemReason, NativePath, PinHealth, PreviousItem,
+    ProjectLifecycle, ProjectOperationKind, ReasonCode, Revision, SessionReadiness, ViewMode,
 };
 
 /// One reason Apply can't run now. The sheet lists every one; Apply refuses
@@ -399,6 +399,50 @@ pub struct ApplyReport {
     /// Why the Apply failed or was canceled; `None` when it was applied or
     /// `PlateVault` closed during it.
     pub stop: Option<ApplyStop>,
+}
+
+/// Apply's wait for a tool (PREP-FR-18): "Waiting for a tool to release a
+/// file in View", with the folder a tool holds a file in and when the wait
+/// began (RFC 3339, UTC). Recorded by the journal while it is
+/// `BuildVerified`, and cleared in the write that moves it on.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ApplyWait {
+    pub held: NativePath,
+    pub since: String,
+}
+
+/// Where an unsettled Apply stands, as its journal records it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ApplyProgress {
+    pub operation_id: Uuid,
+    pub project_id: Uuid,
+    pub phase: ApplyPhase,
+    /// When the Apply reserved the Project (RFC 3339, UTC).
+    pub started_at: String,
+    pub waiting: Option<ApplyWait>,
+}
+
+/// The durable state of one Apply (PREP-FR-09): what `project_apply`
+/// returns as it starts, its status read and what Cancel returns. Cancel
+/// never reads as an outcome of its own: a canceled Apply reads `Settled`
+/// with its report's `canceled` outcome once it stopped.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum ApplyStatus {
+    /// This process runs it; `cancel_requested` once Cancel asked it to stop.
+    Running { progress: ApplyProgress, cancel_requested: bool },
+    /// Unsettled with nothing running it, so the Project stays reserved
+    /// until the next start restores the old View or finishes it. `error`
+    /// is why its run broke off in this process; `None` when no run in this
+    /// process reported one, as when `PlateVault` closed during it.
+    Stopped { progress: ApplyProgress, error: Option<ErrorResponse> },
+    /// It ended, with the report it settled with.
+    Settled { report: ApplyReport },
 }
 
 /// What a View takes (PREP-FR-04): "Linked · 0 B" while it holds only

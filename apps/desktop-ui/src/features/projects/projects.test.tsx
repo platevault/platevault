@@ -8,7 +8,7 @@ import { QueryClientProvider } from "@tanstack/react-query"
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
-import type { ApplyPreview_Serialize, ApplyReport_Serialize, NativePathWire, ProjectSummary, WrapUpStatus } from "@/api/ipc"
+import type { ApplyPreview_Serialize, ApplyReport_Serialize, ApplyStatus_Serialize, NativePathWire, ProjectSummary, WrapUpStatus } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import { m } from "@/lib/i18n"
 import { ApplySheet } from "./apply-sheet"
@@ -43,6 +43,9 @@ function report(over: Partial<ApplyReport_Serialize> = {}): ApplyReport_Serializ
   return { projectId: PROJECT, operationId: "op", generation: 1, outcome: "applied", failures: [], foreign: [], leftovers: [], keptMissing: [], correctedValues: 0, patchedCopies: 0, footprint: { frames: 0, bytes: 0, cloned: 0 }, stop: null, ...over }
 }
 
+const OP = "44444444-4444-4444-4444-444444444444"
+const running: ApplyStatus_Serialize = { state: "running", progress: { operationId: OP, projectId: PROJECT, phase: "reserved", startedAt: "2026-10-31T09:00:00Z", waiting: null }, cancelRequested: false }
+
 afterEach(() => {
   cleanup()
   clearMocks()
@@ -58,7 +61,7 @@ describe("Apply sheet", () => {
       if (command === "project_inputs") return null
       if (command === "project_apply") {
         applied.push((args as { request: unknown }).request)
-        return report()
+        return running
       }
       return null
     })
@@ -95,8 +98,12 @@ describe("Apply sheet", () => {
 })
 
 describe("Apply run", () => {
-  it("reports a cancelled build as cancelled with the old View kept, never as applied", async () => {
-    mockIPC((command) => (command === "project_apply" ? report({ outcome: "canceled", stop: { code: "canceled" } }) : null))
+  it("follows a started build by its id to its cancelled report, never reading it as applied", async () => {
+    mockIPC((command) => {
+      if (command === "project_apply") return running
+      if (command === "project_apply_status") return { state: "settled", report: report({ operationId: OP, outcome: "canceled", stop: { code: "canceled" } }) }
+      return null
+    })
     const client = createQueryClient()
     const { useApplyRun } = await import("./apply-run")
     let seen: ReturnType<typeof useApplyRun> = null
@@ -106,7 +113,9 @@ describe("Apply run", () => {
     }
     render(<Probe />)
     act(() => startApply(client, { projectId: PROJECT, desiredRevision: 4, basisDigest: "digest-a", ticked: [] }))
-    await waitFor(() => expect(seen?.phase).toBe("settled"))
+    await waitFor(() => expect(seen?.phase).toBe("running"))
+    expect(seen).toEqual({ phase: "running", progress: running.progress, cancelRequested: false, readFailure: null })
+    await waitFor(() => expect(seen?.phase).toBe("settled"), { timeout: 3_000 })
     const settled = seen as unknown as { phase: "settled"; result: { ok: true; data: ApplyReport_Serialize } }
     expect(settled.result.ok).toBe(true)
     expect(settled.result.data.outcome).toBe("canceled")

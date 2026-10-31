@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! IPC tests for the controls of the F4 library shell's long operations:
-//! Apply's waiting-for-a-tool event and its Cancel (spec 069 PREP-FR-18),
-//! Close's Stop and its resumption (071 STO-FR-08), and the Output step's
-//! Rescan (070 RES-FR-01). New-capture discovery follows the records the
-//! Trash step and Close's archive move, with no scan (astro-plan-0rfuw).
+//! Apply's waiting-for-a-tool event, durable status and Cancel (spec 069
+//! PREP-FR-09/18), Close's Stop and its resumption (071 STO-FR-08), and the
+//! Output step's Rescan (070 RES-FR-01). New-capture discovery follows the
+//! records the Trash step and Close's archive move, with no scan
+//! (astro-plan-0rfuw).
 //!
 //! The handlers run through Tauri's mock runtime with JSON arguments, as the
 //! webview sends them, over the F4 Apply world of `platevault_core`'s own
@@ -67,6 +68,7 @@ impl Shell {
             .invoke_handler(tauri::generate_handler![
                 desktop_shell::commands::project_apply::project_apply_preview,
                 desktop_shell::commands::project_apply::project_apply,
+                desktop_shell::commands::project_apply::project_apply_status,
                 desktop_shell::commands::project_apply::project_apply_cancel,
                 desktop_shell::commands::project_output::project_output_rescan,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
@@ -142,10 +144,38 @@ fn no_trash(world: &World) -> Arc<dyn OsTrash> {
     ScopedTrash::new(&world.temp.path().join("bin")).dyn_trash()
 }
 
+impl Shell {
+    /// Start the Apply `request` names: it returns Running at once, with
+    /// its operation id, while the build runs on.
+    fn start_apply(&self, request: &Value) -> Uuid {
+        let started = self.call("project_apply", request);
+        assert_eq!(started["state"], "running", "{started}");
+        assert_eq!(started["cancelRequested"], false, "{started}");
+        from(started["progress"]["operationId"].clone())
+    }
+
+    /// The report Apply `operation` settles with, polled from its durable
+    /// status as the webview does.
+    fn settled(&self, operation: Uuid) -> ApplyReport {
+        let deadline = Instant::now() + PATIENCE;
+        loop {
+            let status = self.call("project_apply_status", &json!({ "operationId": operation }));
+            match status["state"].as_str() {
+                Some("settled") => return from(status["report"].clone()),
+                Some("running") => {}
+                _ => panic!("it broke off: {status}"),
+            }
+            assert!(Instant::now() < deadline, "Apply {operation} never settled");
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
 /// PREP-FR-18: a tool holding a file in View makes Apply wait after the
 /// build; the shell emits the operation, its Project and the held folder,
-/// and once the tool lets go Apply continues by itself, emits that it no
-/// longer waits, and ends Applied.
+/// the durable status reads the same folder and when the wait began, and
+/// once the tool lets go Apply continues by itself, emits that it no longer
+/// waits, and settles Applied.
 #[test]
 fn a_held_apply_reports_its_wait_and_continues_once_released() {
     let world = applied(ViewMode::Symlinks);
@@ -154,26 +184,28 @@ fn a_held_apply_reports_its_wait_and_continues_once_released() {
     let request = shell.sheet_request(world.project);
     let held_view = serde_json::to_value(NativePath::from_path(&world.view())).unwrap();
 
-    let report: ApplyReport = thread::scope(|scope| {
-        let held = HeldFolder::hold(&world.view());
-        let webview = &shell.webview;
-        let applying = scope.spawn(move || support::invoke(webview, "project_apply", &request));
-        let started = waits.recv_timeout(PATIENCE).expect("Apply waits for the tool");
-        assert_eq!(started["projectId"], json!(world.project), "{started}");
-        assert_eq!(started["held"], held_view, "it names the View a tool holds a file in");
-        drop(held);
-        let report: ApplyReport = from(applying.join().unwrap().expect("Apply"));
-        assert_eq!(started["operationId"], json!(report.operation_id), "{started}");
-        let ended = waits.recv_timeout(PATIENCE).expect("Apply no longer waits");
-        assert_eq!(
-            ended,
-            json!({ "operationId": report.operation_id, "projectId": world.project, "held": null })
-        );
-        report
-    });
+    let held = HeldFolder::hold(&world.view());
+    let operation = shell.start_apply(&request);
+    let started = waits.recv_timeout(PATIENCE).expect("Apply waits for the tool");
+    assert_eq!(
+        started,
+        json!({ "operationId": operation, "projectId": world.project, "held": held_view })
+    );
+    let status = shell.call("project_apply_status", &json!({ "operationId": operation }));
+    assert_eq!(status["state"], "running", "{status}");
+    assert_eq!(status["progress"]["phase"], "build_verified", "{status}");
+    assert_eq!(status["progress"]["waiting"]["held"], held_view, "it names the held View");
+    assert!(status["progress"]["waiting"]["since"].is_string(), "and when it began: {status}");
+    drop(held);
+    let report = shell.settled(operation);
+    let ended = waits.recv_timeout(PATIENCE).expect("Apply no longer waits");
+    assert_eq!(
+        ended,
+        json!({ "operationId": operation, "projectId": world.project, "held": null })
+    );
 
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
-    let journal = block_on(world.journal(report.operation_id));
+    let journal = block_on(world.journal(operation));
     assert_eq!(
         (journal.phase, journal.outcome),
         (ApplyPhase::Settled, Some(ApplyOutcome::Applied))
@@ -181,49 +213,43 @@ fn a_held_apply_reports_its_wait_and_continues_once_released() {
     assert!(waits.try_recv().is_err(), "one wait, one end");
 }
 
-/// PREP-FR-09/18: Cancel, by the operation id the waiting event names,
-/// stops an Apply a tool holds; its journal ends Canceled, the old View is
-/// untouched and the build is cleared. A Cancel once it ended finds nothing.
+/// PREP-FR-09/18 (astro-plan-wre19.6): starting Apply returns its operation
+/// id at once; Cancel by that id, while a tool holds it, reads Running with
+/// Cancel requested, never success; the Apply settles Canceled, its journal
+/// too, the old View untouched and the build cleared. A Cancel once it
+/// settled reads the settled report.
 #[test]
-fn cancel_stops_a_held_apply_and_its_journal_ends_canceled() {
+fn cancel_by_the_started_id_settles_a_held_apply_canceled() {
     let world = applied(ViewMode::Symlinks);
     let before = World::tree(&world.view());
     let shell = Shell::new(&world.library, no_trash(&world));
     let waits = shell.waits();
     let request = shell.sheet_request(world.project);
 
-    let report: ApplyReport = thread::scope(|scope| {
-        // Declared in the scope, so a failed assertion lets the Apply go
-        // before the scope joins it.
-        let _held = HeldFolder::hold(&world.view());
-        let webview = &shell.webview;
-        let applying = scope.spawn(move || support::invoke(webview, "project_apply", &request));
-        let started = waits.recv_timeout(PATIENCE).expect("Apply waits for the tool");
-        let operation = started["operationId"].clone();
-        let canceled = shell.invoke("project_apply_cancel", &json!({ "operationId": operation }));
-        assert_eq!(canceled, Ok(Value::Null));
-        let ended = waits.recv_timeout(PATIENCE).expect("the canceled Apply no longer waits");
-        assert_eq!(ended["held"], Value::Null, "{ended}");
-        let report: ApplyReport = from(applying.join().unwrap().expect("Apply"));
-        assert_eq!(json!(report.operation_id), operation);
-        report
-    });
+    let held = HeldFolder::hold(&world.view());
+    let operation = shell.start_apply(&request);
+    let started = waits.recv_timeout(PATIENCE).expect("Apply waits for the tool");
+    assert_eq!(started["operationId"], json!(operation), "{started}");
+    let canceling = shell.call("project_apply_cancel", &json!({ "operationId": operation }));
+    assert_eq!(canceling["state"], "running", "Cancel reports no outcome: {canceling}");
+    assert_eq!(canceling["cancelRequested"], true, "{canceling}");
+    let report = shell.settled(operation);
+    drop(held);
+    let ended = waits.recv_timeout(PATIENCE).expect("the canceled Apply no longer waits");
+    assert_eq!(ended["held"], Value::Null, "{ended}");
 
+    assert_eq!(report.operation_id, operation);
     assert_eq!(report.outcome, Some(ApplyOutcome::Canceled), "{report:#?}");
     assert_eq!(report.stop, Some(ApplyStop::Canceled), "{report:#?}");
-    let journal = block_on(world.journal(report.operation_id));
+    let journal = block_on(world.journal(operation));
     assert_eq!(
         (journal.phase, journal.outcome, journal.stop),
         (ApplyPhase::Settled, Some(ApplyOutcome::Canceled), Some(ApplyStop::Canceled))
     );
     assert_eq!(World::tree(&world.view()), before, "the old View is unchanged");
     assert!(!world.building().exists() && !world.previous().exists());
-    shell.refuses(
-        "project_apply_cancel",
-        &json!({ "operationId": report.operation_id }),
-        NOT_FOUND,
-        report.operation_id,
-    );
+    let again = shell.call("project_apply_cancel", &json!({ "operationId": operation }));
+    assert_eq!(again, json!({ "state": "settled", "report": report }));
 }
 
 /// An OS Trash that holds its first move until the test lets it go, so the

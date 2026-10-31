@@ -570,9 +570,11 @@ export const commands = {
 	 */
 	projectApplyPreview: (projectId: string) => typedError<ApplyPreview_Serialize, ErrorResponse>(__TAURI_INVOKE("project_apply_preview", { projectId })),
 	/**
-	 *  Apply the reviewed sheet: the request echoes the sheet's Project revision
-	 *  and basis digest, and names the foreign files that move into the new View.
-	 *  A build that fails or is canceled reports that outcome in the report.
+	 *  Start the reviewed sheet's Apply: the request echoes the sheet's Project
+	 *  revision and basis digest, and names the foreign files that move into the
+	 *  new View. Returns as soon as it reserved the Project, Running with its
+	 *  operation id; `project_apply_status` reads how it goes on and ends, a
+	 *  build that fails or is canceled settling with that outcome.
 	 * 
 	 *  # Errors
 	 *  `Conflict` when the Project or the Library moved since the sheet;
@@ -580,19 +582,30 @@ export const commands = {
 	 *  `SymlinksUnavailable` when Windows Developer Mode is off and
 	 *  `LinksUnsupported` when the processing location holds no links, for a
 	 *  Symlinks View;
-	 *  `InvalidInput` naming every other blocker; `IdentityConflict` when both the
-	 *  install and restoring the old View failed; catalog errors.
+	 *  `InvalidInput` naming every other blocker; catalog errors.
 	 */
-	projectApply: (request: ApplyRequest) => typedError<ApplyReport_Serialize, ErrorResponse>(__TAURI_INVOKE("project_apply", { request })),
+	projectApply: (request: ApplyRequest) => typedError<ApplyStatus_Serialize, ErrorResponse>(__TAURI_INVOKE("project_apply", { request })),
 	/**
-	 *  Cancel the running Apply `operation_id`: it stops where it is safe and
-	 *  keeps the old View, or, once the new View is being installed, finishes.
-	 *  `project_apply` reports how it ended.
+	 *  The durable state of Apply `operation_id`: Running in this shell, with
+	 *  where its journal stands, which folder a tool holds and since when, and
+	 *  whether Cancel asked it to stop; Stopped when nothing runs it (the next
+	 *  start settles it), with the error its run broke off with in this shell;
+	 *  Settled with its report.
 	 * 
 	 *  # Errors
-	 *  `NotFound` when no Apply with that operation runs in this shell.
+	 *  `NotFound` for an unknown Apply; catalog errors.
 	 */
-	projectApplyCancel: (operationId: string) => typedError<null, ErrorResponse>(__TAURI_INVOKE("project_apply_cancel", { operationId })),
+	projectApplyStatus: (operationId: string) => typedError<ApplyStatus_Serialize, ErrorResponse>(__TAURI_INVOKE("project_apply_status", { operationId })),
+	/**
+	 *  Ask the running Apply `operation_id` to stop where it is safe: it keeps
+	 *  the old View, or, once the new View is being installed, finishes. Returns
+	 *  its status, never an outcome of its own: Running with Cancel requested
+	 *  until it stopped, then Settled with the report that says how it ended.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown Apply; catalog errors.
+	 */
+	projectApplyCancel: (operationId: string) => typedError<ApplyStatus_Serialize, ErrorResponse>(__TAURI_INVOKE("project_apply_cancel", { operationId })),
 	/**
 	 *  Whether `folder` can hold the symlinks of a Symlinks View (PREP-FR-15):
 	 *  on Windows whether Developer Mode is on, elsewhere whether its
@@ -2163,6 +2176,16 @@ export type ApplyFailure = {
  */
 export type ApplyOutcome = "applied" | "failed" | "canceled";
 
+/**
+ *  The durable phases of one Apply, in order. Each is recorded before the
+ *  effect it names, so a restart restores the old View or installs the
+ *  verified new one, never a partial one. Phases may be skipped (the first
+ *  Apply moves no old View, a build with no held file waits for nothing).
+ */
+export type ApplyPhase = "reserved" | "sources_verified" | "building" | "build_verified" | 
+/**  Windows: a tool holds a file in View; Apply continues once released. */
+"waiting_for_release" | "old_moved" | "new_installed" | "manifest_committed" | "foreign_transferred" | "retiring_previous" | "settled";
+
 /**  The Apply sheet's backend part, read-only. */
 export type ApplyPreview = ApplyPreview_Serialize | ApplyPreview_Deserialize;
 
@@ -2224,6 +2247,16 @@ export type ApplyPreview_Serialize = {
 	/**  What `View (previous)/` still holds, with its review. */
 	leftovers: PreviousItem_Serialize[],
 	blockers: ApplyBlocker[],
+};
+
+/**  Where an unsettled Apply stands, as its journal records it. */
+export type ApplyProgress = {
+	operationId: string,
+	projectId: string,
+	phase: ApplyPhase,
+	/**  When the Apply reserved the Project (RFC 3339, UTC). */
+	startedAt: string,
+	waiting: ApplyWait | null,
 };
 
 /**
@@ -2334,6 +2367,52 @@ export type ApplyRequest = {
 };
 
 /**
+ *  The durable state of one Apply (PREP-FR-09): what `project_apply`
+ *  returns as it starts, its status read and what Cancel returns. Cancel
+ *  never reads as an outcome of its own: a canceled Apply reads `Settled`
+ *  with its report's `canceled` outcome once it stopped.
+ */
+export type ApplyStatus = ApplyStatus_Serialize | ApplyStatus_Deserialize;
+
+/**
+ *  The durable state of one Apply (PREP-FR-09): what `project_apply`
+ *  returns as it starts, its status read and what Cancel returns. Cancel
+ *  never reads as an outcome of its own: a canceled Apply reads `Settled`
+ *  with its report's `canceled` outcome once it stopped.
+ */
+export type ApplyStatus_Deserialize = 
+/**  This process runs it; `cancel_requested` once Cancel asked it to stop. */
+({ state: "running"; progress: ApplyProgress; cancelRequested: boolean }) & { error?: never; report?: never } | 
+/**
+ *  Unsettled with nothing running it, so the Project stays reserved
+ *  until the next start restores the old View or finishes it. `error`
+ *  is why its run broke off in this process; `None` when no run in this
+ *  process reported one, as when `PlateVault` closed during it.
+ */
+({ state: "stopped"; progress: ApplyProgress; error: ErrorResponse | null }) & { cancelRequested?: never; report?: never } | 
+/**  It ended, with the report it settled with. */
+({ state: "settled"; report: ApplyReport_Deserialize }) & { cancelRequested?: never; error?: never; progress?: never };
+
+/**
+ *  The durable state of one Apply (PREP-FR-09): what `project_apply`
+ *  returns as it starts, its status read and what Cancel returns. Cancel
+ *  never reads as an outcome of its own: a canceled Apply reads `Settled`
+ *  with its report's `canceled` outcome once it stopped.
+ */
+export type ApplyStatus_Serialize = 
+/**  This process runs it; `cancel_requested` once Cancel asked it to stop. */
+({ state: "running"; progress: ApplyProgress; cancelRequested: boolean }) & { error?: never; report?: never } | 
+/**
+ *  Unsettled with nothing running it, so the Project stays reserved
+ *  until the next start restores the old View or finishes it. `error`
+ *  is why its run broke off in this process; `None` when no run in this
+ *  process reported one, as when `PlateVault` closed during it.
+ */
+({ state: "stopped"; progress: ApplyProgress; error: ErrorResponse | null }) & { cancelRequested?: never; report?: never } | 
+/**  It ended, with the report it settled with. */
+({ state: "settled"; report: ApplyReport_Serialize }) & { cancelRequested?: never; error?: never; progress?: never };
+
+/**
  *  Why an Apply ended Failed or Canceled, with the old View in place. The
  *  catalogues word each code as `apply_stop_<code>`; a `count` is what the
  *  copy names. What the code doesn't say (paths, an OS error's text) goes
@@ -2390,10 +2469,22 @@ export type ApplyStop =
 { code: "not_installed" };
 
 /**
+ *  Apply's wait for a tool (PREP-FR-18): "Waiting for a tool to release a
+ *  file in View", with the folder a tool holds a file in and when the wait
+ *  began (RFC 3339, UTC). Recorded by the journal while it is
+ *  `BuildVerified`, and cleared in the write that moves it on.
+ */
+export type ApplyWait = {
+	held: NativePathWire,
+	since: string,
+};
+
+/**
  *  The `project_apply_waiting` event: Apply `operationId` of `projectId`
  *  waits for a tool that holds a file in `held`, its `View/` folder, or with
  *  `held` null no longer waits. It continues by itself once the file is
- *  released; `project_apply_cancel` keeps the old View.
+ *  released; `project_apply_cancel` keeps the old View. `project_apply_status`
+ *  reads the same wait durably, with when it began.
  */
 export type ApplyWaiting = {
 	operationId: string,
