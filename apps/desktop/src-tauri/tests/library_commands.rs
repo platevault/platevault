@@ -84,6 +84,7 @@ impl Shell {
                 desktop_shell::commands::project_output::project_copy_to_output,
                 desktop_shell::commands::project_output::project_output_list,
                 desktop_shell::commands::project_wrap_up::project_wrap_up_status,
+                desktop_shell::commands::project_wrap_up::project_close_status,
                 desktop_shell::commands::project_wrap_up::project_close,
                 desktop_shell::commands::project_wrap_up::project_duplicate,
                 desktop_shell::commands::frame_review::pix_session_intake,
@@ -520,6 +521,7 @@ fn wrap_up_family_takes_its_arguments() {
     let shell = Shell::new();
     let project = Uuid::new_v4();
     shell.refuses("project_wrap_up_status", &json!({ "projectId": project }), NOT_FOUND, project);
+    shell.refuses("project_close_status", &json!({ "projectId": project }), NOT_FOUND, project);
     shell.refuses(
         "project_close",
         &json!({ "request": { "projectId": project, "desiredRevision": 1, "archive": null } }),
@@ -539,6 +541,14 @@ fn wrap_up_family_takes_its_arguments() {
         NOT_FOUND,
         project,
     );
+}
+/// Close status IPC accepts the Project argument and reports no archive before one is started.
+#[test]
+fn project_close_status_ipc_reads_an_open_project() {
+    let shell = Shell::new();
+    let project = shell.open_project();
+
+    assert_eq!(shell.call("project_close_status", &json!({ "projectId": project })), Value::Null);
 }
 
 #[test]

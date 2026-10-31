@@ -669,6 +669,19 @@ export const commands = {
 	 */
 	projectWrapUpStatus: (projectId: string) => typedError<WrapUpStatus, ErrorResponse>(__TAURI_INVOKE("project_wrap_up_status", { projectId })),
 	/**
+	 *  The durable status and report of a Project's Close/archive, including after a remount or restart.
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown Project; catalog or journal errors.
+	 */
+	projectCloseStatus: (projectId: string) => typedError<
+/**  The Project's archive operation is active; `progress` is its durable journal view. */
+{ state: "running"; progress: ArchiveProgress } | 
+/**  The operation was stopped before it settled; recovery resumes from `progress`. */
+{ state: "stopped"; progress: ArchiveProgress } | 
+/**  The archive settled, with one outcome per reviewed file. */
+{ state: "settled"; report: ArchiveProgress } | null, ErrorResponse>(__TAURI_INVOKE("project_close_status", { projectId })),
+	/**
 	 *  Close project…, Archive's Proceed: with no session selected the Project
 	 *  closes with no archive. Returns the lifecycle it reached, its Closed
 	 *  snapshot and the archive's progress: Closing, unsettled, after a stop.
@@ -6719,6 +6732,15 @@ export type ProjectCapture_Serialize = {
 	inclusion: CaptureInclusion,
 	qualityWhenAdded: ApplicableQuality,
 };
+
+/**  The durable state of a Project's Close/archive run. */
+export type ProjectCloseStatus = 
+/**  The Project's archive operation is active; `progress` is its durable journal view. */
+{ state: "running"; progress: ArchiveProgress } | 
+/**  The operation was stopped before it settled; recovery resumes from `progress`. */
+{ state: "stopped"; progress: ArchiveProgress } | 
+/**  The archive settled, with one outcome per reviewed file. */
+{ state: "settled"; report: ArchiveProgress };
 
 /**  Everything a Project holds as its intent, read in one snapshot. */
 export type ProjectDesired = ProjectDesired_Serialize | ProjectDesired_Deserialize;

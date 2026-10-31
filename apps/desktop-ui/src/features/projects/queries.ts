@@ -31,6 +31,7 @@ export const projectRowsQuery = () => libraryQuery("projectRows", null, true, 0,
 export const inputsQuery = (projectId: string) => libraryQuery("projectInputs", projectId)
 export const progressQuery = (projectId: string) => libraryQuery("projectProgress", projectId)
 export const wrapUpStatusQuery = (projectId: string) => libraryQuery("projectWrapUpStatus", projectId)
+export const closeStatusQuery = (projectId: string) => libraryQuery("projectCloseStatus", projectId)
 export const closedSnapshotQuery = (projectId: string) => libraryQuery("projectClosedSnapshot", projectId)
 export const applyPreviewQuery = (projectId: string) => libraryQuery("projectApplyPreview", projectId)
 export const previousItemsQuery = (projectId: string) => libraryQuery("projectPreviousItems", projectId)
@@ -44,6 +45,7 @@ export const locationsQuery = () => libraryQuery("libraryListLocations")
  * (View (previous)/ to review, failed work).
  */
 const PROJECT_READS: readonly LibraryCommand[] = [
+  "projectCloseStatus",
   "projectList",
   "projectRows",
   "projectGet",

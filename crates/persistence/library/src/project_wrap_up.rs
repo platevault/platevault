@@ -1226,6 +1226,42 @@ impl Catalog {
         read_archive(&mut conn, storage_operation_id).await
     }
 
+    /// The latest durable Close/archive run for `project_id`, if it closed with an archive.
+    ///
+    /// Reads the operation and every file from the same SQLite snapshot.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt record.
+    pub async fn project_archive_run(&self, project_id: Uuid) -> Result<Option<ArchiveRun>> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let row = sqlx::query(
+            "SELECT m.storage_operation_id FROM archive_moves m \
+             JOIN project_operations o ON o.id = m.project_operation_id \
+             WHERE m.project_id = ?1 AND o.kind = 'archive' \
+             ORDER BY o.reserved_at DESC LIMIT 1",
+        )
+        .bind(project_id.to_string())
+        .fetch_optional(&mut *snapshot)
+        .await?;
+        let run = if let Some(row) = row {
+            let id = parse_uuid(&row.try_get::<String, _>("storage_operation_id")?)?;
+            Some(read_archive(&mut snapshot, id).await?)
+        } else {
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM projects WHERE id = ?1)")
+                    .bind(project_id.to_string())
+                    .fetch_one(&mut *snapshot)
+                    .await?;
+            if !exists {
+                return Err(LibraryError::NotFound(format!("project {project_id}")));
+            }
+            None
+        };
+        snapshot.rollback().await?;
+        Ok(run)
+    }
+
     /// Every archive a stop left unsettled: one with a move that has no
     /// outcome, or a Closing Project's whose operation is still active.
     ///

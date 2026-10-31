@@ -17,8 +17,10 @@ mod cleanup_support;
 use std::fs;
 use std::io::Write as _;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use apply_support::{corrected, world, World, HA, OIII, OIII_FLATS, PROJECT, SEP24, SEP28};
 use cleanup_support::ScopedTrash;
@@ -72,6 +74,23 @@ impl ArchiveControl for StopAfter {
         let left = self.0.load(Ordering::SeqCst);
         self.0.store(left.saturating_sub(1), Ordering::SeqCst);
         left == 0
+    }
+}
+
+/// Pause an active archive at its next durable-step boundary so status can be read concurrently.
+struct GatedArchive {
+    entered: mpsc::Sender<()>,
+    resume: Mutex<mpsc::Receiver<()>>,
+    pause: AtomicBool,
+}
+
+impl ArchiveControl for GatedArchive {
+    fn interrupted(&self) -> bool {
+        if self.pause.swap(false, Ordering::SeqCst) {
+            self.entered.send(()).unwrap();
+            self.resume.lock().unwrap().recv().unwrap();
+        }
+        false
     }
 }
 
@@ -633,6 +652,8 @@ async fn a_stopped_close_resumes_to_archived_with_its_kept_view_repointed() {
     );
 
     world.reopen().await;
+    let stopped = world.library.project_close_status(world.project).await.unwrap().unwrap();
+    assert_eq!(stopped, ProjectCloseStatus::Stopped { progress: report.archive.clone().unwrap() });
     let settled = world.library.recover_wrap_up(trash.dyn_trash()).await.unwrap();
     assert_eq!(settled.len(), 1);
     let progress = &settled[0];
@@ -845,6 +866,57 @@ fn links_read_originals(world: &World, review: &ArchiveReview) {
         let path = link.link.to_path_buf().unwrap();
         assert!(reads_below(&path, &captures), "{} reads outside captures", path.display());
     }
+}
+
+/// A Close/archive's read state is durable and includes its per-file report.
+#[tokio::test]
+async fn close_status_reads_durable_archive_progress_before_and_after_restart() {
+    let mut world = world(ViewMode::Symlinks).await;
+    world.apply().await;
+    let (archive, _) = archive_location(&world).await;
+    let trash = bin(&world);
+    skip_to_archive(&world, &trash).await;
+    let review = world.library.wrap_up_archive_review(world.project, archive.id).await.unwrap();
+    let request = close_all(&world, &archive, &review).await;
+
+    let (entered, wait_for_release) = mpsc::channel();
+    let (release, resume) = mpsc::channel();
+    let gated = Arc::new(GatedArchive {
+        entered,
+        resume: Mutex::new(resume),
+        pause: AtomicBool::new(true),
+    });
+    let library = Arc::clone(&world.library);
+    let worker_trash = trash.clone();
+    let worker_control = gated.clone();
+    drop(gated);
+    let close = thread::spawn(move || {
+        tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(
+            library.close_project(&request, worker_trash.dyn_trash(), worker_control.as_ref()),
+        )
+    });
+    wait_for_release.recv().expect("archive reached its first durable step");
+
+    let running = world.library.project_close_status(world.project).await.unwrap().unwrap();
+    let ProjectCloseStatus::Running { progress } = running else { panic!("{running:#?}") };
+    assert!(!progress.settled);
+    assert_eq!(progress.moves.len(), 4);
+    assert!(progress.moves.iter().all(|step| step.outcome.is_none()));
+
+    release.send(()).unwrap();
+    let report = close.join().unwrap().unwrap();
+    assert_eq!(report.lifecycle, ProjectLifecycle::Archived);
+    let settled = world.library.project_close_status(world.project).await.unwrap().unwrap();
+    let ProjectCloseStatus::Settled { report } = settled else { panic!("{settled:#?}") };
+    assert!(report.settled);
+    assert_eq!(report.moves.len(), 4);
+    assert!(report.moves.iter().all(|step| step.outcome == Some(ArchiveMoveOutcome::Archived)));
+
+    // Reopening the Library must recover this report from the catalog/journal,
+    // rather than the process-local archive run registry.
+    world.reopen().await;
+    let reopened = world.library.project_close_status(world.project).await.unwrap().unwrap();
+    assert_eq!(reopened, ProjectCloseStatus::Settled { report });
 }
 
 /// Whether the link at `path` reads an entry below `root`, compared in the
