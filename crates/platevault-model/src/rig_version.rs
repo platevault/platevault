@@ -18,10 +18,6 @@ use uuid::Uuid;
 
 use crate::{canonical_decimal, comparison_key, LibraryError, Revision};
 
-fn invalid(message: String) -> LibraryError {
-    LibraryError::InvalidInput(message)
-}
-
 /// One physical camera body.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,40 +65,68 @@ impl Camera {
         Ok(())
     }
 
-    /// Every camera of the rigs: each valid and once, aliases unique, and an
-    /// alias on every camera of a model two or more cameras share.
+    /// The request cameras together with the cameras already stored, whose
+    /// ids are not being saved: each request is valid, aliases are unique,
+    /// and every camera of a shared model has an alias.
     ///
     /// # Errors
-    /// `InvalidInput` naming the camera or alias; an invalid camera's field
-    /// is named below its position, while a clash between cameras names no
-    /// one field.
-    pub fn validate_all(cameras: &[Self]) -> Result<(), LibraryError> {
-        let mut ids = BTreeSet::new();
-        let mut aliases = BTreeSet::new();
-        let mut models: BTreeMap<String, u32> = BTreeMap::new();
-        for camera in cameras {
-            camera.validate()?;
-            if !ids.insert(camera.id) {
-                return Err(invalid(format!("camera {} is listed twice", camera.id)));
-            }
-            if let Some(alias) = camera.alias_key() {
-                if !aliases.insert(alias) {
-                    return Err(invalid(format!(
-                        "two cameras share the alias {}",
-                        camera.alias.as_deref().unwrap_or_default().trim()
-                    )));
-                }
-            }
+    /// `InvalidInput` names the request camera's field and identity. Fields
+    /// are relative to the request position; a clash with a stored camera
+    /// names the request camera involved in that clash.
+    pub fn validate_all(request: &[Self], stored: &[Self]) -> Result<(), LibraryError> {
+        let mut ids: BTreeSet<_> = stored.iter().map(|camera| camera.id).collect();
+        let mut aliases: BTreeSet<_> = stored.iter().filter_map(Self::alias_key).collect();
+        let mut models: BTreeMap<String, usize> = BTreeMap::new();
+        for camera in request.iter().chain(stored) {
             *models.entry(camera.model_key()).or_default() += 1;
         }
-        if let Some(camera) = cameras.iter().find(|camera| {
-            camera.alias.is_none()
-                && models.get(&camera.model_key()).is_some_and(|count| *count > 1)
-        }) {
-            return Err(invalid(format!(
-                "several cameras are a {}: each needs a unique alias",
-                camera.model.trim()
-            )));
+
+        for (index, camera) in request.iter().enumerate() {
+            if !ids.insert(camera.id) {
+                return Err(LibraryError::invalid_field(
+                    &format!("{index}.id"),
+                    format!("camera {} is listed twice", camera.id),
+                )
+                .concerning(camera.id));
+            }
+            camera
+                .validate()
+                .map_err(|error| error.concerning(camera.id).within_field(&index.to_string()))?;
+            if let Some(alias) = camera.alias_key() {
+                if !aliases.insert(alias) {
+                    return Err(LibraryError::invalid_field(
+                        &format!("{index}.alias"),
+                        format!(
+                            "two cameras share the alias {}",
+                            camera.alias.as_deref().unwrap_or_default().trim()
+                        ),
+                    )
+                    .concerning(camera.id));
+                }
+            }
+        }
+
+        let missing_alias = request
+            .iter()
+            .enumerate()
+            .find(|(_, camera)| {
+                camera.alias.is_none()
+                    && models.get(&camera.model_key()).is_some_and(|count| *count > 1)
+            })
+            .or_else(|| {
+                request.iter().enumerate().find(|(_, camera)| {
+                    models.get(&camera.model_key()).is_some_and(|count| *count > 1)
+                        && request.iter().chain(stored).any(|peer| {
+                            peer.alias.is_none() && peer.model_key() == camera.model_key()
+                        })
+                })
+            });
+        if let Some((index, camera)) = missing_alias {
+            return Err(LibraryError::invalid_field(
+                &format!("{index}.alias"),
+                format!("several cameras are a {}: each needs a unique alias", camera.model.trim()),
+            )
+            .concerning(camera.id));
         }
         Ok(())
     }
