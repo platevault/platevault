@@ -276,6 +276,7 @@ macro_rules! library_commands {
             crate::commands::import::import_start,
             crate::commands::import::import_retry,
             crate::commands::import::import_status,
+            crate::commands::import::import_list,
             crate::commands::import::import_merge_sessions,
             crate::commands::import::import_resplit_session,
             crate::commands::import::import_split_preview,

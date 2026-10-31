@@ -3355,6 +3355,8 @@ fn location_from_row(row: &SqliteRow) -> Result<Location> {
         identity: from_json(&row.try_get::<String, _>("identity")?)?,
         decision_revision: revision(row.try_get("decision_revision")?)?,
         availability: from_text(&row.try_get::<String, _>("availability")?)?,
+        free_bytes: None,
+        low_space: None,
         last_observed_at: row.try_get("last_observed_at")?,
         lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
         volume_kind: from_text(&row.try_get::<String, _>("volume_kind")?)?,

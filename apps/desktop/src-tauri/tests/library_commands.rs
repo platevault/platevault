@@ -116,6 +116,7 @@ impl Shell {
                 desktop_shell::commands::rigs::library_save_camera,
                 desktop_shell::commands::targets_list::targets_get,
                 desktop_shell::commands::targets_list::targets_presets_list,
+                desktop_shell::commands::library::library_list_locations,
             ])
             .build(mock_context(noop_assets()))
             .expect("build mock app");
@@ -904,6 +905,35 @@ fn library_data_location_returns_the_native_catalog_directory() {
     let shell = Shell::new();
     let actual = shell.call("library_data_location", &json!({}));
     assert_eq!(actual, native_path(shell.dir.path()));
+}
+
+/// Home Status (PRJ-FR-17 section 4): an online location carries its
+/// volume's free space and low-space flag; an offline one reads unknown.
+#[test]
+fn library_list_locations_carries_the_volume_free_space_until_offline() {
+    let shell = Shell::new();
+    let root = shell.dir.path().join("Captures");
+    std::fs::create_dir_all(&root).expect("captures root");
+    let id = shell.destination(&root);
+    let location = |listed: &Value| {
+        let state = listed
+            .as_array()
+            .and_then(|states| states.iter().find(|state| state["location"]["id"] == json!(id)))
+            .unwrap_or_else(|| panic!("the location is listed: {listed}"));
+        (state["location"]["freeBytes"].clone(), state["location"]["lowSpace"].clone())
+    };
+    let (free, low) = location(&shell.call("library_list_locations", &json!({})));
+    assert!(free.is_u64() && low.is_boolean(), "online: {free} {low}");
+
+    let library = shell.library();
+    tauri::async_runtime::block_on(library.catalog().mark_location_unavailable(
+        id,
+        platevault_core::Availability::Offline,
+        "ejected",
+    ))
+    .expect("mark offline");
+    let (free, low) = location(&shell.call("library_list_locations", &json!({})));
+    assert_eq!((free, low), (Value::Null, Value::Null), "offline is unknown, never zero");
 }
 
 /// PLAN-TGT-FR-01/14: `targets_get` takes the Target and an optional list

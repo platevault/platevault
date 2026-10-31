@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::frame_review::FrameReview;
 use crate::grouping::Intake;
+use crate::import::mounted_root;
 use crate::inventory;
 use crate::patched_copy::{self, EntryFrame};
 use crate::projects::{CalibrationReferences, ProjectReferences};
@@ -24,9 +25,9 @@ use crate::targets::{
 };
 use crate::{
     AssetReference, AssociationKind, AssociationState, Availability, CorrectionInput,
-    ExpectedAsset, FileIdentity, FramingMargins, LibraryError, Location, LocationRole, NativePath,
-    ObservationFingerprint, ReferenceKind, RemapReview, RetireReview, Revision, ScanOperation,
-    ScanOptions, ScanState, TargetCandidate,
+    ExpectedAsset, FileIdentity, FramingMargins, LibraryError, Location, LocationLifecycle,
+    LocationRole, NativePath, ObservationFingerprint, ReferenceKind, RemapReview, RetireReview,
+    Revision, ScanOperation, ScanOptions, ScanState, TargetCandidate,
 };
 use persistence_library::{
     Catalog, CorrectionOutcome, CorrectionPreview, LocationReferences, LocationRegistration,
@@ -341,6 +342,26 @@ impl Library {
         let location =
             self.catalog.apply_remap(review_id, expected, InventoryProbe::default()).await?;
         Ok(self.location_changed(location))
+    }
+
+    /// Every registered location, each Active and Available one with its
+    /// volume's free space and low-space flag probed now through the root
+    /// check Import uses (Home Status, PRJ-FR-17 section 4). Both stay unknown,
+    /// never zero, for a retired or offline location and for a root or volume
+    /// that cannot be read.
+    ///
+    /// # Errors
+    /// Catalog read failures.
+    pub async fn list_locations(&self) -> Result<Vec<Location>, LibraryError> {
+        let mut locations = self.catalog.list_locations().await?;
+        let probes = locations.clone();
+        let spaces =
+            blocking(move || Ok(probes.iter().map(volume_space).collect::<Vec<_>>())).await?;
+        for (location, space) in locations.iter_mut().zip(spaces) {
+            location.free_bytes = space.map(|(free, _)| free);
+            location.low_space = space.map(|(_, low)| low);
+        }
+        Ok(locations)
     }
 
     /// Register a qualified native root without scanning or modifying its files.
@@ -1122,6 +1143,30 @@ pub(crate) async fn blocking<T: Send + 'static>(
     })?
 }
 
+/// The share of a volume's capacity below which its free space is low, in
+/// percent. Current specs give no number; this is legacy spec 030 §11.1 and
+/// FR-121 ("a volume drops below 10% free").
+const LOW_SPACE_PERCENT: u64 = 10;
+
+/// Free bytes on the volume of an Active, Available location and whether
+/// they are low; `None` when the location is not probed or cannot be.
+fn volume_space(location: &Location) -> Option<(u64, bool)> {
+    if location.lifecycle != LocationLifecycle::Active
+        || location.availability != Availability::Available
+    {
+        return None;
+    }
+    let root = mounted_root(location).ok()?;
+    let free = fs4::available_space(&root).ok()?;
+    let capacity = fs4::total_space(&root).ok().filter(|&capacity| capacity > 0)?;
+    Some((free, low_space(free, capacity)))
+}
+
+/// Whether `free` is under [`LOW_SPACE_PERCENT`] of `capacity`, exactly.
+fn low_space(free: u64, capacity: u64) -> bool {
+    u128::from(free) * 100 < u128::from(capacity) * u128::from(LOW_SPACE_PERCENT)
+}
+
 /// How a root that failed its identity check reads: Offline when it is gone,
 /// Unreadable when access is denied, `IdentityConflict` for another volume or
 /// folder; `None` for any other failure.
@@ -1149,6 +1194,17 @@ mod tests {
     use crate::inventory::{OsVolumes, Probed, VolumeCache, VolumeProbe};
     use crate::scan_support::scan_to_end;
     use crate::{ExpectedAsset, Quality};
+
+    #[test]
+    fn a_volume_is_low_just_below_the_low_space_share_and_not_at_it() {
+        let capacity = 1_000_000_000_000;
+        let at = capacity / 100 * LOW_SPACE_PERCENT;
+        assert!(low_space(at - 1, capacity), "just below the share is low");
+        assert!(!low_space(at, capacity), "exactly the share is not low");
+        assert!(!low_space(capacity, capacity));
+        assert!(low_space(0, capacity));
+        assert!(!low_space(u64::MAX, u64::MAX), "no overflow at the largest volume");
+    }
 
     fn target_basis(detail: &SessionDetail) -> BTreeMap<Uuid, ObservationFingerprint> {
         detail

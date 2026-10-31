@@ -1,8 +1,8 @@
 /**
  * Home's Pending ingestions (PRJ-FR-17 section 1): per Captures location,
  * new files since its last scan, a location never scanned or whose last
- * scan did not finish, and stopped imports with Retry. A running import
- * changes its own row ("Importing 142 files · 40%").
+ * scan did not finish, and stopped or failed imports with Retry. A running
+ * import changes its own row ("Importing 142 files · 40%").
  *
  * Offline is not absence: a Captures location that is offline, missing or
  * unreadable keeps its row with that state, since its new files cannot be
@@ -11,17 +11,12 @@
  * Sources, all durable reads: `library_list_locations`,
  * `library_new_captures` (refreshed on its event), each Captures
  * location's own last scan (`library_list_operations` for that location,
- * one row), and each import the issues name as left
- * unfinished (`work-interrupted`, read through `import_status`; an owner
- * that is no import, a measurement run, reads `not_found` and has no row
- * here). Running imports come from `home_dashboard`'s Running work, so they
- * show once that read answers; a failed or partial
- * settled import is listed nowhere until the import list of
- * astro-plan-wre19.10 exists.
+ * one row), and `import_list` for every running, interrupted, failed or
+ * partial import, re-read each second while one runs.
  */
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { FolderPlus } from "lucide-react"
-import { type ImportOperation_Serialize, failureOf, type HomeDashboard_Serialize, type Location, library, NEW_CAPTURES_EVENT, type ScanOperation } from "@/api/ipc"
+import { type ImportListEntry, type ImportSummary, type Location, library, NEW_CAPTURES_EVENT, type ScanOperation } from "@/api/ipc"
 import { useRefreshOnEvent } from "@/api/events"
 import { libraryKey } from "@/api/query"
 import { useMessages } from "@/app/preferences"
@@ -33,15 +28,15 @@ import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { Unavailable, readError } from "./parts"
-import { homeWrite, importQuery, importWrite, issuesQuery, lastScanQuery, locationsQuery, newCapturesQuery } from "./queries"
+import { readError } from "./parts"
+import { homeWrite, importListQuery, importWrite, lastScanQuery, locationsQuery, newCapturesQuery, PENDING_IMPORT_STATES } from "./queries"
 
 /** Rows a Home section shows before "All N ›" (C8). */
 export const ROWS = 5
 
 export type IngestionRow =
   | { kind: "location"; location: Location; state: { kind: "offline" } | { kind: "scanning" } | { kind: "never-scanned" } | { kind: "incomplete" } | { kind: "new-files"; count: number } }
-  | { kind: "import"; importId: string; operation: ImportOperation_Serialize | null; running: boolean }
+  | { kind: "import"; entry: ImportListEntry }
 
 /** A location's row, or none when nothing waits there. A scan that read only part of the location did not finish. */
 export function locationIngestion(location: Location, lastScan: ScanOperation | undefined, newFiles: number): IngestionRow | null {
@@ -55,20 +50,36 @@ export function locationIngestion(location: Location, lastScan: ScanOperation | 
 }
 
 /** The import's progress over the items it approved: settled ones of every approved one. */
-export function importPercent(op: ImportOperation_Serialize): number {
-  const s = op.summary
+export function importPercent(s: ImportSummary): number {
   const done = s.imported + s.failed + s.uncertain
   const total = done + s.pending
   return total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
 }
 
-function ingestionText(m: Messages, row: IngestionRow): string {
-  if (row.kind === "import") {
-    if (!row.operation) return m.home_import_stopped()
-    const approved = row.operation.summary.imported + row.operation.summary.pending + row.operation.summary.failed + row.operation.summary.uncertain
-    if (row.running) return m.home_importing({ count: approved, files: formatCount(approved), percent: importPercent(row.operation) })
-    return m.home_import_stopped()
+function importText(m: Messages, entry: ImportListEntry): string {
+  const s = entry.summary
+  switch (entry.state) {
+    case "running": {
+      const approved = s.imported + s.pending + s.failed + s.uncertain
+      return m.home_importing({ count: approved, files: formatCount(approved), percent: importPercent(s) })
+    }
+    case "interrupted":
+      return m.home_import_stopped()
+    case "failed":
+      return m.home_import_failed()
+    case "partial":
+      return m.home_import_partial()
+    case "settled":
+      // Home never asks for a cleanly settled import (PENDING_IMPORT_STATES).
+      return m.status_finished()
   }
+}
+
+/** The operation status a stopped or settled import's badge shows; a running one reads as its progress. */
+const IMPORT_BADGE = { interrupted: "interrupted", failed: "failed", partial: "partial", settled: "succeeded" } as const
+
+function ingestionText(m: Messages, row: IngestionRow): string {
+  if (row.kind === "import") return importText(m, row.entry)
   switch (row.state.kind) {
     case "offline":
       return m.status_offline()
@@ -84,81 +95,66 @@ function ingestionText(m: Messages, row: IngestionRow): string {
 }
 
 function rowId(row: IngestionRow): string {
-  return row.kind === "location" ? `location:${row.location.id}` : `import:${row.importId}`
+  return row.kind === "location" ? `location:${row.location.id}` : `import:${row.entry.id}`
 }
 
 const locationLink = (locationId: string): StepLink => ({ to: "/settings/locations", search: { locationId } })
 const importRunLink = (importId: string): StepLink => ({ to: "/import", search: { step: "run", import: importId } })
 
-/** The section's rows: unfinished and running imports first, then the locations in name order. */
-export function useIngestions(dashboard: HomeDashboard_Serialize | null) {
+/** The section's rows: imports as the library lists them, most recently updated first, then the locations in name order. */
+export function useIngestions() {
   const locations = useQuery(locationsQuery())
   const captures = useQuery(newCapturesQuery())
-  const issues = useQuery(issuesQuery())
+  const imports = useQuery({
+    ...importListQuery(PENDING_IMPORT_STATES),
+    refetchInterval: (query) => (query.state.data?.some((entry) => entry.state === "running") ? 1000 : false),
+  })
   const captureLocations = (locations.data ?? []).map((state) => state.location).filter((l) => l.role === "captures" && l.lifecycle === "active")
   const scans = useQueries({ queries: captureLocations.map((l) => lastScanQuery(l.id)) })
   useRefreshOnEvent(NEW_CAPTURES_EVENT, libraryKey("libraryNewCaptures"))
-  const running = (dashboard?.runningWork ?? []).flatMap((work) => (work.kind === "import" ? [work.importId] : []))
-  const stopped = (issues.data?.issues ?? []).flatMap((issue) => (issue.kind === "work-interrupted" && issue.owner.kind === "operation" ? [issue.owner.id] : []))
-  const importIds = [...new Set([...running, ...stopped])]
-  const imports = useQueries({
-    queries: importIds.map((id) => ({ ...importQuery(id), refetchInterval: running.includes(id) ? 1000 : (false as const) })),
-  })
-  const importRows: IngestionRow[] = importIds.flatMap((importId, index): IngestionRow[] => {
-    const read = imports[index]
-    const failure = failureOf(read?.error)
-    // A work-interrupted owner that is a measurement run is no import.
-    if (failure?.source === "library" && failure.error.code === "not_found") return []
-    const operation = read?.data ?? null
-    if (operation && operation.state !== "running" && operation.state !== "interrupted") return []
-    return [{ kind: "import", importId, operation, running: running.includes(importId) || operation?.state === "running" }]
-  })
+  const importRows: IngestionRow[] = (imports.data ?? []).map((entry) => ({ kind: "import", entry }))
   const newFiles = new Map((captures.data?.locations ?? []).map((c) => [c.locationId, c.newFiles]))
   const lastScan = new Map(captureLocations.map((l, i) => [l.id, scans[i]?.data?.[0]]))
   const locationRows = [...captureLocations]
     .sort((a, b) => a.name.localeCompare(b.name))
     .flatMap((location) => locationIngestion(location, lastScan.get(location.id), newFiles.get(location.id) ?? 0) ?? [])
-  // An unreadable issues read hides stopped imports: it is a failed read, never "nothing stopped".
-  const error = locations.error ?? captures.error ?? issues.error ?? scans.find((s) => s.error)?.error ?? null
-  const loading = locations.isPending || captures.isPending || issues.isPending || scans.some((s) => s.isPending)
-  const refetch = () => void Promise.all([locations.refetch(), captures.refetch(), issues.refetch(), ...scans.map((s) => s.refetch())])
+  // An unreadable import list is a failed read, never "nothing stopped".
+  const error = locations.error ?? captures.error ?? imports.error ?? scans.find((s) => s.error)?.error ?? null
+  const loading = locations.isPending || captures.isPending || imports.isPending || scans.some((s) => s.isPending)
+  const refetch = () => void Promise.all([locations.refetch(), captures.refetch(), imports.refetch(), ...scans.map((s) => s.refetch())])
   return { rows: [...importRows, ...locationRows], loading, error, hasCaptures: captureLocations.length > 0, refetch }
 }
 
-export function IngestionsTable({ ingestions, dashboardReady }: { ingestions: ReturnType<typeof useIngestions>; dashboardReady: boolean }) {
+export function IngestionsTable({ ingestions }: { ingestions: ReturnType<typeof useIngestions> }) {
   const m = useMessages()
   const follow = useFollowLink()
   const client = useQueryClient()
   const { rows, loading, error, hasCaptures, refetch } = ingestions
+  const rowName = (r: IngestionRow) => (r.kind === "location" ? r.location.name : r.entry.sourcePath.display)
   const columns: Column<IngestionRow>[] = [
-    {
-      id: "location",
-      header: m.home_column_location(),
-      rowHeader: true,
-      truncate: true,
-      sortValue: (r) => (r.kind === "location" ? r.location.name : (r.operation?.sourcePath.display ?? r.importId)),
-      cell: (r) => (r.kind === "location" ? r.location.name : (r.operation?.sourcePath.display ?? "–")),
-    },
+    { id: "location", header: m.home_column_location(), rowHeader: true, truncate: true, sortValue: rowName, cell: rowName },
     {
       id: "state",
       header: m.home_column_state(),
       sortValue: (r) => ingestionText(m, r),
       cell: (r) => {
         if (r.kind === "location" && r.state.kind === "offline") return <StatusBadge kind="availability" value={r.location.availability === "unreadable" ? "unreadable" : r.location.availability === "missing" ? "absent" : "offline"} />
-        if (r.kind === "import" && !r.running) return <StatusBadge kind="operation" value="interrupted" label={ingestionText(m, r)} />
+        if (r.kind === "import" && r.entry.state !== "running") return <StatusBadge kind="operation" value={IMPORT_BADGE[r.entry.state]} label={ingestionText(m, r)} />
         return ingestionText(m, r)
       },
     },
   ]
   const primary = (r: IngestionRow): Action | null => {
     if (r.kind === "import") {
-      if (r.running) return null
+      // Only an interrupted import resumes; a settled one has an outcome for every item, which its page shows.
+      if (r.entry.state !== "interrupted") return null
+      const importId = r.entry.id
       return {
         id: "retry",
         label: m.verb_retry(),
         run: async () => {
-          const result = await importWrite(client, r.importId, () => library.importRetry(r.importId))
-          if (result.ok) follow(importRunLink(r.importId))
+          const result = await importWrite(client, importId, () => library.importRetry(importId))
+          if (result.ok) follow(importRunLink(importId))
           return result
         },
       }
@@ -178,31 +174,26 @@ export function IngestionsTable({ ingestions, dashboardReady }: { ingestions: Re
         return null
     }
   }
-  // "Everything is imported." (PRJ-FR-22) is a claim this section cannot back yet: running imports wait on
-  // astro-plan-wre19.9 and failed or partial imports on the import list of astro-plan-wre19.10. Switch to
-  // m.home_everything_imported() once both land; until then the empty text says only what was read.
+  // Every source above answered with nothing waiting (PRJ-FR-22): an offline location keeps its own row.
   const empty = hasCaptures ? (
-    m.home_no_new_files()
+    m.home_everything_imported()
   ) : (
     <EmptyState icon={FolderPlus} title={m.home_add_captures_location()} action={<ActionButton action={{ id: "add-location", label: m.storage_add_location(), run: () => follow({ to: "/settings/locations", search: { add: "captures" } }) }} />} />
   )
+  const open = (r: IngestionRow) => follow(r.kind === "location" ? locationLink(r.location.id) : importRunLink(r.entry.id))
   return (
-    <>
-      <BoxTable
-        label={m.home_ingestions()}
-        rows={rows.slice(0, ROWS)}
-        columns={columns}
-        getRowId={rowId}
-        rowLabel={(r) => (r.kind === "location" ? r.location.name : (r.operation?.sourcePath.display ?? r.importId))}
-        primaryRowAction={primary}
-        rowActions={(r) => [{ id: "open", label: m.verb_open(), run: () => follow(r.kind === "location" ? locationLink(r.location.id) : importRunLink(r.importId)) }]}
-        onRowClick={(r) => follow(r.kind === "location" ? locationLink(r.location.id) : importRunLink(r.importId))}
-        loading={loading}
-        error={error ? { message: readError(m, error), onRetry: refetch } : undefined}
-        empty={empty}
-      />
-      {/* Running imports arrive with home_dashboard's Running work; until it answers they are not known. */}
-      {dashboardReady ? null : <Unavailable what={m.home_running_imports()} />}
-    </>
+    <BoxTable
+      label={m.home_ingestions()}
+      rows={rows.slice(0, ROWS)}
+      columns={columns}
+      getRowId={rowId}
+      rowLabel={rowName}
+      primaryRowAction={primary}
+      rowActions={(r) => [{ id: "open", label: m.verb_open(), run: () => open(r) }]}
+      onRowClick={open}
+      loading={loading}
+      error={error ? { message: readError(m, error), onRetry: refetch } : undefined}
+      empty={empty}
+    />
   )
 }

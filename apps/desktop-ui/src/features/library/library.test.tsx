@@ -25,7 +25,7 @@ import type {
 import { createQueryClient } from "@/api/query"
 import type { SessionReviewProps } from "@/app/shell-contract"
 import { setLocale } from "@/app/preferences"
-import { formatList } from "@/lib/format"
+import { formatBytes, formatList } from "@/lib/format"
 import { LOCALES, m } from "@/lib/i18n"
 import { AddToProjectDialog } from "./add-to-project"
 import { HomePage } from "./home-page"
@@ -574,12 +574,13 @@ function emptyHome(command: string): unknown {
   if (command === "library_list_operations") return []
   if (command === "library_issues") return { issues: [], dismissed: [], counts: { danger: 0, warning: 0, info: 0 }, pages: [] }
   if (command === "library_list_sessions") return []
+  if (command === "import_list") return []
   return null
 }
 
 describe("Home", () => {
   it("keeps an offline Captures location as offline, never as everything imported", () => {
-    const location = { id: "loc-1", name: "NAS captures", path: encode("/Volumes/NAS"), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "offline", lastObservedAt: null, lifecycle: "active", volumeKind: "network" } as const
+    const location = { id: "loc-1", name: "NAS captures", path: encode("/Volumes/NAS"), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "offline", freeBytes: null, lowSpace: null, lastObservedAt: null, lifecycle: "active", volumeKind: "network" } as const
     expect(locationIngestion(location, undefined, 0)).toEqual({ kind: "location", location, state: { kind: "offline" } })
     expect(locationIngestion({ ...location, availability: "available" }, undefined, 0)).toMatchObject({ state: { kind: "never-scanned" } })
   })
@@ -688,18 +689,77 @@ describe("Home", () => {
     expect(screen.getByRole("button", { name: m.home_edit_criteria() })).toBeInTheDocument()
   })
 
-  it("never says everything is imported while running and failed imports can't be read", async () => {
-    const location = { id: "loc-1", name: "Captures", path: encode("/Astro/Captures"), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "available", lastObservedAt: null, lifecycle: "active", volumeKind: "local" }
-    const scan = { id: "scan-1", locationId: "loc-1", state: "completed", progress: {}, issues: [], completeScopes: [], incompleteScopes: [], startedAt: "2026-10-29T10:00:00Z", finishedAt: "2026-10-29T10:01:00Z" }
-    mockIPC((command) => {
-      if (command === "library_list_locations") return [{ location, failure: null }]
+  const homeLocation = (id: string, name: string, over: object = {}) => ({ location: { id, name, path: encode(`/Astro/${name}`), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "available", freeBytes: null, lowSpace: null, lastObservedAt: null, lifecycle: "active", volumeKind: "local", ...over }, failure: null })
+  const completedScan = { id: "scan-1", locationId: "loc-1", state: "completed", progress: {}, issues: [], completeScopes: [], incompleteScopes: [], startedAt: "2026-10-29T10:00:00Z", finishedAt: "2026-10-29T10:01:00Z" }
+  const counts = (over: object) => ({ ready: 0, imported: 0, duplicates: 0, unclassified: 0, settling: 0, blocked: 0, excluded: 0, pending: 0, failed: 0, failedVerification: 0, sourcesTrashed: 0, sourcesKept: 0, uncertain: 0, ...over })
+  const importEntry = (id: string, state: string, summary: object) => ({ id, sourcePath: encode(`/Volumes/${id}`), state, summary: counts(summary), updatedAt: "2026-10-31T10:00:00Z" })
+
+  it("says everything is imported once the locations and the import list answer with nothing waiting", async () => {
+    const asked: unknown[] = []
+    mockIPC((command, args) => {
+      if (command === "import_list") {
+        asked.push(args)
+        return []
+      }
+      if (command === "library_list_locations") return [homeLocation("loc-1", "Captures")]
       if (command === "library_new_captures") return { locations: [{ locationId: "loc-1", newFiles: 0, live: true }] }
-      if (command === "library_list_operations") return [scan]
-      if (command === "library_issues") return { issues: [], dismissed: [], counts: { danger: 0, warning: 0, info: 0 }, pages: [] }
+      if (command === "library_list_operations") return [completedScan]
       return null
     })
     renderAt("/")
-    expect(await screen.findByText(m.home_no_new_files())).toBeInTheDocument()
+    expect(await screen.findByText(m.home_everything_imported())).toBeInTheDocument()
+    expect(asked).toContainEqual({ states: ["running", "interrupted", "failed", "partial"] })
+  })
+
+  it("never says everything is imported while the import list can't be read", async () => {
+    mockIPC((command) => {
+      if (command === "import_list") throw { ...conflict, code: "persistence_failure", retry: "retry", currentRevision: null }
+      if (command === "library_list_locations") return [homeLocation("loc-1", "Captures")]
+      if (command === "library_new_captures") return { locations: [{ locationId: "loc-1", newFiles: 0, live: true }] }
+      if (command === "library_list_operations") return [completedScan]
+      return null
+    })
+    renderAt("/")
+    const section = await screen.findByRole("table", { name: m.home_ingestions() })
+    expect(await within(section).findByRole("button", { name: m.verb_retry() })).toBeInTheDocument()
     expect(screen.queryByText(m.home_everything_imported())).toBeNull()
+  })
+
+  it("lists running, stopped, failed and partial imports from the import list, with Retry only on the stopped one", async () => {
+    mockIPC((command) => {
+      if (command === "import_list")
+        return [
+          importEntry("RUN", "running", { imported: 2, pending: 2 }),
+          importEntry("STOP", "interrupted", { imported: 1, pending: 3 }),
+          importEntry("FAIL", "failed", { failed: 2 }),
+          importEntry("PART", "partial", { imported: 1, failed: 1 }),
+        ]
+      return emptyHome(command)
+    })
+    renderAt("/")
+    expect(await screen.findByText(m.home_importing({ count: 4, files: "4", percent: 50 }))).toBeInTheDocument()
+    expect(screen.getByText(m.home_import_stopped())).toBeInTheDocument()
+    expect(screen.getByText(m.home_import_failed())).toBeInTheDocument()
+    expect(screen.getByText(m.home_import_partial())).toBeInTheDocument()
+    expect(screen.getAllByRole("button", { name: m.verb_retry() })).toHaveLength(1)
+    expect(screen.queryByText(m.home_everything_imported())).toBeNull()
+  })
+
+  it("shows each location's free space with the low-space flag, and unknown, never zero, while offline", async () => {
+    mockIPC((command) => {
+      if (command === "library_list_locations")
+        return [
+          homeLocation("loc-1", "Archive", { freeBytes: 40_000_000_000, lowSpace: true }),
+          homeLocation("loc-2", "Captures", { freeBytes: 900_000_000_000, lowSpace: false }),
+          homeLocation("loc-3", "NAS", { availability: "offline" }),
+        ]
+      return emptyHome(command)
+    })
+    renderAt("/")
+    const status = await screen.findByRole("table", { name: m.home_locations() })
+    expect(await within(status).findByText(m.import_free({ size: formatBytes(40_000_000_000) }))).toBeInTheDocument()
+    expect(within(status).getByText(m.import_free({ size: formatBytes(900_000_000_000) }))).toBeInTheDocument()
+    expect(within(status).getAllByText(m.status_low_space())).toHaveLength(1)
+    expect(within(status).getByText(m.status_unknown())).toBeInTheDocument()
   })
 })

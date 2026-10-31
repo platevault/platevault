@@ -157,6 +157,40 @@ impl Catalog {
         load_import(&mut conn, id).await
     }
 
+    /// The imports in `states`, most recently updated first, read in one
+    /// snapshot. With `settled_with_failures`, a Settled import is read only
+    /// when one of its items Failed or stayed Uncertain, so a list of failed
+    /// and partial imports never loads every import that settled cleanly.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` for an unreadable record.
+    pub async fn import_records(
+        &self,
+        states: &[ImportState],
+        settled_with_failures: bool,
+    ) -> Result<Vec<ImportRecord>> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let rows = sqlx::query(
+            "SELECT o.id FROM import_operations o \
+             WHERE o.state IN (SELECT value FROM json_each(?1)) \
+             AND (?2 = 0 OR o.state <> 'settled' OR EXISTS (SELECT 1 FROM import_items i \
+                 WHERE i.op_id = o.id AND i.phase IN ('failed', 'uncertain'))) \
+             ORDER BY o.updated_at DESC, o.id",
+        )
+        .bind(to_json(&states)?)
+        .bind(settled_with_failures)
+        .fetch_all(&mut *snapshot)
+        .await?;
+        let mut records = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let id = parse_uuid(&row.try_get::<String, _>("id")?)?;
+            records.push(load_import(&mut snapshot, id).await?);
+        }
+        snapshot.rollback().await?;
+        Ok(records)
+    }
+
     /// Replace a preview's source identity, choices and items (a recheck
     /// observes the source again and may add files).
     ///

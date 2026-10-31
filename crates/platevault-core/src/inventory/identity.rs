@@ -1313,6 +1313,8 @@ mod tests {
             identity: registered.identity.clone(),
             decision_revision: 1,
             availability: crate::Availability::Available,
+            free_bytes: None,
+            low_space: None,
             last_observed_at: None,
             lifecycle: crate::LocationLifecycle::Active,
             volume_kind: VolumeKind::Network,
