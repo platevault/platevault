@@ -8,7 +8,7 @@
  *   arrows (a slider, a menu, the list's resize handle) and a zoomed plate
  *   (which pans) keep them.
  * - P X U mark; Shift+P and Shift+X mark and advance even with auto-advance
- *   off. Z zoom, F fullscreen, C compare, G grid, T table height, Space
+ *   off. Z zoom, F fullscreen, C compare, V cycles the view, T table height, Space
  *   toggles the current frame in the selection.
  * - ⌘A selects every frame shown, ⌘I toggles the corner inspector, ⌘↩
  *   finishes the review, ⌥1 to ⌥4 filter (by key position, so a layout's
@@ -24,7 +24,7 @@ export type ReviewKey =
   | { id: "step"; delta: 1 | -1 }
   | { id: "row"; delta: 1 | -1 }
   | { id: "mark"; quality: "usable" | "unusable" | "unreviewed"; always: boolean }
-  | { id: "zoom" | "fullscreen" | "compare" | "grid" | "height" | "select-all" | "corners" | "finish" | "toggle-selected" | "escape" }
+  | { id: "zoom" | "fullscreen" | "compare" | "view" | "height" | "select-all" | "corners" | "finish" | "toggle-selected" | "escape" }
   | { id: "filter"; filter: ReviewFilter }
 
 /** The key-cap legends the toolbar, the menus and the palette print (shared by every locale). */
@@ -37,7 +37,7 @@ export const REVIEW_KEYS = {
   zoom: "Z",
   fullscreen: "F",
   compare: "C",
-  grid: "G",
+  view: "V",
   height: "T",
 } as const
 
@@ -63,7 +63,7 @@ const SINGLE: Record<string, ReviewKey> = {
   z: { id: "zoom" },
   f: { id: "fullscreen" },
   c: { id: "compare" },
-  g: { id: "grid" },
+  v: { id: "view" },
   t: { id: "height" },
   u: { id: "mark", quality: "unreviewed", always: false },
 }

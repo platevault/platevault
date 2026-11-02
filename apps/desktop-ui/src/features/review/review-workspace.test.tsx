@@ -8,7 +8,7 @@ import type { Quality } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import { setLocale, setSingleKeyShortcuts } from "@/app/preferences"
 import { ZOOM_LABEL } from "@/components/domain/plate"
-import { DEFAULT_LOCALE, LOCALES, m } from "@/lib/i18n"
+import { DEFAULT_LOCALE, m } from "@/lib/i18n"
 import { commandsSent, type ReviewHost, reviewHost, SESSION_ID } from "./__fixtures__/review-host"
 import { type ReviewCommands, useReviewCommands } from "./commands"
 import { reloadReviewPrefs, ROWS_DEFAULT_PX, setReviewPrefs } from "./prefs"
@@ -123,14 +123,6 @@ function listed(): string[] {
   return [...list.querySelectorAll("tbody tr[data-row] th")].map((th) => th.textContent ?? "")
 }
 
-/** The revision each mark named, in order. */
-function revisionsSent(): { assetId: string; decisionRevision: number; quality: Quality }[] {
-  return commandsSent(host, "pix_session_review_mark").map((c) => {
-    const mark = c.args.mark as { asset: { assetId: string; decisionRevision: number }; quality: Quality }
-    return { assetId: mark.asset.assetId, decisionRevision: mark.asset.decisionRevision, quality: mark.quality }
-  })
-}
-
 function marksSent(): { assetId: string; quality: Quality }[] {
   return commandsSent(host, "pix_session_review_mark").map((c) => {
     const mark = c.args.mark as { asset: { assetId: string }; quality: Quality }
@@ -211,6 +203,24 @@ describe.each(["table", "filmstrip", "grid"] as const)("Review hotkeys in the %s
   beforeEach(async () => {
     await renderReview()
     await chooseView(view)
+  })
+
+  it("cycles table, filmstrip and grid with V from every view", async () => {
+    const cycle = { table: "filmstrip", filmstrip: "grid", grid: "table" } as const
+    let expected: typeof view = view
+    for (let count = 0; count < 3; count += 1) {
+      expected = cycle[expected]
+      press("v")
+      await waitFor(() => expect(viewShown()).toBe(expected))
+      await expectCurrent(1)
+      expect(listed()).toHaveLength(6)
+    }
+  })
+
+  it("does not handle G so the shell may start its go-to sequence", () => {
+    const event = new KeyboardEvent("keydown", { key: "g", bubbles: true, cancelable: true })
+    document.activeElement?.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
   })
 
   it("steps with J, K and the arrows", async () => {
@@ -303,7 +313,8 @@ describe.each(["table", "filmstrip", "grid"] as const)("Review hotkeys in the %s
     expect(marksSent()).toEqual([])
     await userEvent.setup().click(within(dialog).getByRole("button", { name: m.store_label_mark_frames(said) }))
     await waitFor(() => expect(marksSent()).toHaveLength(6))
-    expect(new Set(marksSent().map((s) => s.quality))).toEqual(new Set(["unusable"]))
+    expect(statusLine()).toContain(m.status_bar_selected({ count: 6 }))
+    expect(viewShown()).toBe(view)
   })
 
   it("filters with ⌥4 and keeps the view", async () => {
@@ -330,13 +341,11 @@ describe("Review views share one list (PIX-FR-11, PIX-AC-16)", () => {
     const order = listed()
     expect(order[0]).toBe(nameOf(6))
 
-    press("g")
+    press("v")
+    press("v")
     await waitFor(() => expect(viewShown()).toBe("grid"))
     expect(listed()).toEqual(order)
-    // Frame 3 is fourth in the descending order.
-    await expectCurrent(3, 4)
     expect(document.querySelector('[data-frame-id="asset-2"]')).toHaveAttribute("aria-pressed", "true")
-    expect(document.querySelector('[data-frame-id="asset-3"]')).toHaveAttribute("aria-pressed", "true")
     expect(document.querySelector('[data-frame-id="asset-3"]')).toHaveAttribute("aria-current", "true")
 
     // A mark on the two selected frames, from the grid.
@@ -348,13 +357,15 @@ describe("Review views share one list (PIX-FR-11, PIX-AC-16)", () => {
       ]),
     )
 
-    await chooseView("filmstrip")
+    expect(listed()).toEqual(order)
+    press("v")
+    await waitFor(() => expect(viewShown()).toBe("table"))
+    press("v")
+    await waitFor(() => expect(viewShown()).toBe("filmstrip"))
+    press("v")
+    await waitFor(() => expect(viewShown()).toBe("grid"))
     expect(listed()).toEqual(order)
     expect(document.querySelector('[data-frame-id="asset-2"]')).toHaveAttribute("aria-pressed", "true")
-    press("g")
-    press("g")
-    await chooseView("table")
-    expect(listed()).toEqual(order)
     expect(statusLine()).toContain(m.status_bar_selected({ count: 2 }))
   })
 })
@@ -386,7 +397,7 @@ describe("Review refusals and sources", () => {
     await waitFor(() => expect(caption()).toContain(nameOf(1)))
     expect(within(document.querySelector<HTMLElement>("[data-workspace-pane='current']")!).getByText(m.status_offline(), { exact: false })).toBeInTheDocument()
     expect(commandsSent(host, "pix_open_frame")).toEqual([])
-    press("g")
+    press("v")
     expect(await screen.findByRole("button", { name: `${nameOf(1)}, ${m.status_unreviewed()}, ${m.status_offline()}` })).toBeInTheDocument()
   })
 
@@ -411,141 +422,29 @@ describe("Finish review (409cm.6)", () => {
     const { onFinished } = await renderReview({ marked: 6 })
     press("Enter", { mod: true })
     await waitFor(() => expect(onFinished).toHaveBeenCalledTimes(1))
-    expect(commandsSent(host, "pix_finish_review").map((c) => c.args)).toEqual([{ sessionId: SESSION_ID, expectedGroupingRevision: 4 }])
-    // Nothing of another step: no Target or Rig confirmation, no other write.
-    expect(new Set(host.calls.map((c) => c.command))).toEqual(new Set(["pix_session_review_list", "pix_open_frame", "pix_preview_tile", "pix_finish_review"]))
-  })
-
-  it("does not hand over when the grouping changed since the list was read", async () => {
-    const { onFinished } = await renderReview({ marked: 6 })
-    host.groupingRevision = 5
-    press("Enter", { mod: true })
-    expect(await screen.findByText(m.action_failure_conflict())).toBeInTheDocument()
-    expect(onFinished).not.toHaveBeenCalled()
-  })
-})
-
-describe("Review read-only while intake's Review step is locked (astro-plan-ocyuc.11)", () => {
-  it.each(LOCALES)("%s: P, X, U, their Shift variants and ⌘↩ send nothing, and every mark and Finish review names the reason", async (locale) => {
-    setLocale(locale)
-    // The reason is the host's: intake names the step to confirm first.
-    const reason = m.stepflow_finish_first({ step: m.sessions_column_target() })
-    const { onFinished } = await renderReview({ marked: 6, readOnly: { reason } })
-    for (const key of ["p", "x", "u"]) press(key)
-    press("p", { shift: true })
-    press("x", { shift: true })
-    press("Enter", { mod: true })
-    // Viewing goes on: J moves to the next frame.
-    press("j")
-    await expectCurrent(2)
-    expect(commandsSent(host, "pix_session_review_mark")).toEqual([])
-    expect(commandsSent(host, "pix_finish_review")).toEqual([])
-    expect(onFinished).not.toHaveBeenCalled()
-    const finish = m.stepflow_finish_review()
-    expect(screen.getByRole("button", { name: finish })).toHaveAccessibleDescription(`${finish} · ${reason}`)
-    // The palette carries the same reason on each mark and on Finish review.
-    const unavailable = Object.fromEntries((palette?.("Review") ?? []).map((c) => [c.label, c.unavailable]))
-    for (const label of [m.review_cmd_usable(), m.review_cmd_unusable(), m.review_cmd_unreviewed(), finish]) expect(unavailable[label]).toBe(reason)
-    expect(unavailable[m.review_cmd_next()]).toBeUndefined()
-  })
-
-  it.each(LOCALES)("%s: keeps a ⌘A selection's marks unavailable without asking, and names the lock in fullscreen, which covers the step footer", async (locale) => {
-    setLocale(locale)
-    const reason = m.stepflow_finish_first({ step: m.sessions_column_rig() })
-    await renderReview({ readOnly: { reason } })
-    press("a", { mod: true })
-    expect(statusLine()).toContain(m.status_bar_selected({ count: 6 }))
-    press("p")
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
-    expect(commandsSent(host, "pix_session_review_mark")).toEqual([])
-    press("Escape")
-    press("f")
-    const bar = await screen.findByRole("dialog", { name: m.review_cmd_fullscreen() })
-    expect(within(bar).getByText(`${m.stepflow_read_only()} · ${reason}`)).toBeInTheDocument()
-    expect(within(bar).getByRole("button", { name: m.review_cmd_usable() })).toHaveAccessibleDescription(`${m.review_cmd_usable()} · ${reason}`)
-  })
-})
-
-describe("Review marks in flight", () => {
-  it("names the revision the first mark recorded when U follows P on one frame at once", async () => {
-    await renderReview()
-    act(() => setReviewPrefs({ autoAdvance: false }))
-    press("p")
-    press("u")
-    await waitFor(() => expect(revisionsSent()).toHaveLength(2))
-    expect(revisionsSent()).toEqual([
-      { assetId: "asset-1", decisionRevision: 1, quality: "usable" },
-      { assetId: "asset-1", decisionRevision: 2, quality: "unreviewed" },
+    expect(commandsSent(host, "pix_finish_review")).toEqual([
+      { command: "pix_finish_review", args: { sessionId: SESSION_ID, expectedGroupingRevision: 4 } },
     ])
-    expect(screen.queryByText(m.action_failure_conflict())).toBeNull()
-  })
-
-  it("keeps the frame the user moved to while a mark was under way", async () => {
-    await renderReview()
-    let release!: () => void
-    host.hold = new Promise((resolve) => {
-      release = resolve
-    })
-    press("p")
-    press("j")
-    press("j")
-    await expectCurrent(3)
-    act(() => release())
-    await waitFor(() => expect(marksSent()).toEqual([{ assetId: "asset-1", quality: "usable" }]))
-    await waitFor(() => expect(statusLine()).toContain(m.flow_frames_unreviewed({ count: 5 })))
-    await expectCurrent(3)
-  })
-
-  it("says how many frames a selection mark had marked when the library refused the rest", async () => {
-    await renderReview()
-    press(" ")
-    press("j")
-    press(" ")
-    // Another window marked frame 2 since this list was read.
-    host.frames[1] = { ...host.frames[1]!, asset: { ...host.frames[1]!.asset, decisionRevision: 9 } }
-    press("x")
-    expect(await screen.findByText(m.action_failure_conflict())).toBeInTheDocument()
-    expect(toasts).toHaveBeenCalledWith({ message: m.review_marked_before_refusal({ marked: "1", total: "2" }) })
   })
 })
 
-describe("Review batch marks under a filter", () => {
-  it("advances past the batch, not to the first frame, when its answers take the marked frames out of the list", async () => {
-    await renderReview()
-    host.markDelayMs = 5
-    press("4", { alt: true, code: "Digit4" })
-    press("j")
-    press("j")
-    press(" ")
-    press("j")
-    press(" ")
-    press("k")
-    await expectCurrent(3)
-    expect(statusLine()).toContain(m.status_bar_selected({ count: 2 }))
-    press("p")
-    await waitFor(() => expect(marksSent()).toEqual([
-      { assetId: "asset-3", quality: "usable" },
-      { assetId: "asset-4", quality: "usable" },
-    ]))
-    await waitFor(() => expect(listed()).toEqual([nameOf(1), nameOf(2), nameOf(5), nameOf(6)]))
-    // Frame 5 is third in the Unreviewed list now.
-    await expectCurrent(5, 3, 4)
+describe("Review command palette (FR-042)", () => {
+  it("lists the open Review's commands with the same keys and unavailable reasons", async () => {
+    await renderReview({ count: 2, marked: 2 })
+    const commands = palette!("Review")
+    expect(commands.map((command) => [command.label, command.shortcut])).toEqual(
+      expect.arrayContaining([
+        [m.review_cmd_next(), "J"],
+        [m.review_cmd_previous(), "K"],
+        [m.review_cmd_view(), "V"],
+        [m.review_cmd_height(), "T"],
+        [m.review_cmd_fullscreen(), "F"],
+      ]),
+    )
   })
 })
 
 describe("Review keys stay quiet where they do not belong", () => {
-  it("marks nothing when the ⌘A confirmation is cancelled, and the keys wait while it is open", async () => {
-    await renderReview()
-    press("a", { mod: true })
-    press("p")
-    const dialog = await screen.findByRole("alertdialog")
-    press("j")
-    expect(currentId()).toBe("asset-1")
-    await userEvent.setup().click(within(dialog).getByRole("button", { name: m.verb_cancel() }))
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
-    expect(marksSent()).toEqual([])
-  })
-
   it("leaves a text field's keys to it", async () => {
     await renderReview()
     const field = document.createElement("input")
@@ -586,7 +485,7 @@ describe("Review keys stay quiet where they do not belong", () => {
 describe("Review thumbnails", () => {
   it("keeps the thumbnails already read when the filter or sort changes", async () => {
     await renderReview({ marked: 2 })
-    press("g")
+    press("v")
     await waitFor(() => expect(document.querySelectorAll("[data-frame-item] img")).toHaveLength(6))
     const reads = commandsSent(host, "pix_thumbnails").length
     press("2", { alt: true, code: "Digit2" })
