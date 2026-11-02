@@ -67,6 +67,7 @@ function location(id: string, availability: "available" | "offline"): LocationSt
       decisionRevision: 1,
       availability,
       freeBytes: null,
+      usedBytes: null,
       lowSpace: null,
       lastObservedAt: null,
       lifecycle: "active",

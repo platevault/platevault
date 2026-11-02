@@ -23,9 +23,9 @@
  *   the move), then Remap at that review's revision (`library_apply_remap`).
  *   No file changes; a refusal of either shows and the row keeps its path.
  *
- * Each location's volume free space and Low space badge come from the same
- * read (`library_list_locations`), under the share the Locations page's
- * Low space section saves. The frame count and footprint columns of
+ * Each location's volume used and free space and Low space badge come from
+ * the same read (`library_list_locations`), under the share the Locations
+ * page's Low space section saves. The frame count and footprint columns of
  * LIB-FR-21 have no library read yet; the table says so under itself.
  */
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -38,11 +38,12 @@ import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import type { DataTableExpand } from "@/components/app/data-table"
 import { DateText, KeyValueList, PathText } from "@/components/app/data"
+import { UnknownValue } from "@/components/app/feedback"
 import { FieldGroup, SelectField, TextField } from "@/components/app/fields"
 import { blockedByErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { StatusBadge } from "@/components/app/status"
 import { LocationFreeSpace } from "@/components/domain/location-space"
-import { formatCount, formatList } from "@/lib/format"
+import { formatBytes, formatCount, formatList } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { isConflict, lastScanQuery, locationsQuery, settingsWrite } from "./queries"
 
@@ -126,7 +127,7 @@ function IndexedCell({ row }: { row: LocationRow }) {
   return <>{m.location_not_indexed_yet()}</>
 }
 
-/** Name, Role (with `role`), Path, Volume, State, Free (with `space`: the volume's free space and Low space badge) and Indexed. */
+/** Name, Role (with `role`), Path, Volume, State, Used and Free (with `space`: the volume's used space, and its free space with the Low space badge) and Indexed. */
 export function locationColumns(m: Messages, { role, space = false }: { role: boolean; space?: boolean }): Column<LocationRow>[] {
   return [
     { id: "name", header: m.location_col_name(), rowHeader: true, truncate: true, truncateMin: "name", sortValue: (r) => r.state.location.name, cell: (r) => r.state.location.name },
@@ -134,7 +135,13 @@ export function locationColumns(m: Messages, { role, space = false }: { role: bo
     { id: "path", header: m.location_path(), truncate: true, sortValue: (r) => r.state.location.path.display, cell: (r) => <PathText path={r.state.location.path.display} truncate /> },
     { id: "volume", header: m.location_volume(), sortValue: (r) => r.state.location.volumeKind, cell: (r) => volumeText(m, r.state.location.volumeKind) },
     { id: "state", header: m.location_col_state(), sortValue: (r) => r.state.location.availability, cell: (r) => <AvailabilityBadge availability={r.state.location.lifecycle === "retired" ? "retired" : r.state.location.availability} /> },
-    ...(space ? [{ id: "free", header: m.location_col_free(), align: "right" as const, sortValue: (r: LocationRow) => r.state.location.freeBytes, cell: (r: LocationRow) => <LocationFreeSpace location={r.state.location} /> }] : []),
+    ...(space
+      ? [
+          // Unknown while offline or unprobeable, never zero; the State column says why.
+          { id: "used", header: m.location_col_used(), align: "right" as const, sortValue: (r: LocationRow) => r.state.location.usedBytes, cell: (r: LocationRow) => (r.state.location.usedBytes === null ? <UnknownValue /> : formatBytes(r.state.location.usedBytes)) },
+          { id: "free", header: m.location_col_free(), align: "right" as const, sortValue: (r: LocationRow) => r.state.location.freeBytes, cell: (r: LocationRow) => <LocationFreeSpace location={r.state.location} /> },
+        ]
+      : []),
     { id: "indexed", header: m.location_col_indexed(), truncateMin: "date", sortValue: (r) => r.scan?.finishedAt ?? null, cell: (r) => <IndexedCell row={r} /> },
   ]
 }

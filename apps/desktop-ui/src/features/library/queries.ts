@@ -12,7 +12,7 @@
  * durable status.
  */
 import type { QueryClient, QueryKey } from "@tanstack/react-query"
-import type { ActionResult, ImportListState, ImportOperation_Serialize, LibraryCommand } from "@/api/ipc"
+import type { ActionResult, ImportListState, LibraryCommand } from "@/api/ipc"
 import { libraryKey, libraryQuery } from "@/api/query"
 
 /** How many sessions one Sessions read lists; the page names the rest it does not show. */
@@ -88,11 +88,12 @@ export async function homeWrite<T>(client: QueryClient, write: () => Promise<Act
 }
 
 /**
- * Run one import write and re-read the import's durable status once it
- * settles with success or `conflict`: the reply is never shown as the
- * import's state. Any other failure keeps the read and the user's draft.
+ * Run one import write and re-read the import's durable status and the
+ * import list once it settles with success or `conflict`: the reply is
+ * never shown as the import's state. Any other failure keeps the read and
+ * the user's draft.
  */
-export async function importWrite(client: QueryClient, importId: string, write: () => Promise<ActionResult<ImportOperation_Serialize>>): Promise<ActionResult<ImportOperation_Serialize>> {
+export async function importWrite<T>(client: QueryClient, importId: string, write: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
   const result = await write()
   if (result.ok || (result.failure.source === "library" && result.failure.error.code === "conflict"))
     await Promise.all([client.invalidateQueries({ queryKey: importQuery(importId).queryKey }), client.invalidateQueries({ queryKey: libraryKey("importList") })])

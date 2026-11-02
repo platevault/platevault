@@ -960,6 +960,10 @@ pub struct Location {
     /// when unknown: offline, or its root or volume cannot be probed. Records
     /// the catalog returns without a probe report `None` too.
     pub free_bytes: Option<u64>,
+    /// Used bytes on the location's volume (its capacity less its free
+    /// blocks) when the list was read; `None` exactly when
+    /// [`Self::free_bytes`] is.
+    pub used_bytes: Option<u64>,
     /// Free space is under the low-space share of the volume's capacity;
     /// `None` exactly when [`Self::free_bytes`] is.
     pub low_space: Option<bool>,

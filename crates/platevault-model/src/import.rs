@@ -387,9 +387,22 @@ pub struct ImportSummary {
     pub uncertain: u64,
 }
 
-/// Where a started import stands, as its list reads it. A settled import is
-/// Failed when nothing came across and an item failed or stayed uncertain,
-/// Partial when some items came across and some did not, otherwise Settled.
+impl ImportSummary {
+    /// Some approved item didn't come across as reviewed: it Failed, stayed
+    /// Uncertain, or failed verification (a Failed item, or a kept source
+    /// whose source or kept copy didn't verify). The run page reads such a
+    /// settled import as partial, and the import list as Failed or Partial.
+    #[must_use]
+    pub const fn falls_short(&self) -> bool {
+        self.failed > 0 || self.failed_verification > 0 || self.uncertain > 0
+    }
+}
+
+/// Where a started import stands, as its list reads it. A settled import
+/// falls short when an item Failed, stayed Uncertain, or kept its source
+/// because the source or its kept copy failed verification (the run page's
+/// partial rule, [`ImportSummary::falls_short`]). It is then Failed when
+/// nothing came across and Partial when something did, otherwise Settled.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]

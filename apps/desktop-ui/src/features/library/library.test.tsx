@@ -580,7 +580,7 @@ function emptyHome(command: string): unknown {
 
 describe("Home", () => {
   it("keeps an offline Captures location as offline, never as everything imported", () => {
-    const location = { id: "loc-1", name: "NAS captures", path: encode("/Volumes/NAS"), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "offline", freeBytes: null, lowSpace: null, lastObservedAt: null, lifecycle: "active", volumeKind: "network" } as const
+    const location = { id: "loc-1", name: "NAS captures", path: encode("/Volumes/NAS"), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "offline", freeBytes: null, usedBytes: null, lowSpace: null, lastObservedAt: null, lifecycle: "active", volumeKind: "network" } as const
     expect(locationIngestion(location, undefined, 0)).toEqual({ kind: "location", location, state: { kind: "offline" } })
     expect(locationIngestion({ ...location, availability: "available" }, undefined, 0)).toMatchObject({ state: { kind: "never-scanned" } })
   })
@@ -689,7 +689,7 @@ describe("Home", () => {
     expect(screen.getByRole("button", { name: m.home_edit_criteria() })).toBeInTheDocument()
   })
 
-  const homeLocation = (id: string, name: string, over: object = {}) => ({ location: { id, name, path: encode(`/Astro/${name}`), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "available", freeBytes: null, lowSpace: null, lastObservedAt: null, lifecycle: "active", volumeKind: "local", ...over }, failure: null })
+  const homeLocation = (id: string, name: string, over: object = {}) => ({ location: { id, name, path: encode(`/Astro/${name}`), role: "captures", identity: FINGERPRINT.identity, decisionRevision: 1, availability: "available", freeBytes: null, usedBytes: null, lowSpace: null, lastObservedAt: null, lifecycle: "active", volumeKind: "local", ...over }, failure: null })
   const completedScan = { id: "scan-1", locationId: "loc-1", state: "completed", progress: {}, issues: [], completeScopes: [], incompleteScopes: [], startedAt: "2026-10-29T10:00:00Z", finishedAt: "2026-10-29T10:01:00Z" }
   const counts = (over: object) => ({ ready: 0, imported: 0, duplicates: 0, unclassified: 0, settling: 0, blocked: 0, excluded: 0, pending: 0, failed: 0, failedVerification: 0, sourcesTrashed: 0, sourcesKept: 0, uncertain: 0, ...over })
   const importEntry = (id: string, state: string, summary: object) => ({ id, sourcePath: encode(`/Volumes/${id}`), state, summary: counts(summary), updatedAt: "2026-10-31T10:00:00Z" })
@@ -725,7 +725,7 @@ describe("Home", () => {
     expect(screen.queryByText(m.home_everything_imported())).toBeNull()
   })
 
-  it("lists running, stopped, failed and partial imports from the import list, with Retry only on the stopped one", async () => {
+  it("lists running, stopped, failed and partial imports from the import list, with Retry on the stopped one and Dismiss on the settled ones", async () => {
     mockIPC((command) => {
       if (command === "import_list")
         return [
@@ -742,7 +742,33 @@ describe("Home", () => {
     expect(screen.getByText(m.home_import_failed())).toBeInTheDocument()
     expect(screen.getByText(m.home_import_partial())).toBeInTheDocument()
     expect(screen.getAllByRole("button", { name: m.verb_retry() })).toHaveLength(1)
+    expect(screen.getAllByRole("button", { name: m.verb_dismiss() })).toHaveLength(2)
     expect(screen.queryByText(m.home_everything_imported())).toBeNull()
+  })
+
+  it("drops a failed import's row on Dismiss, which brings back the location rows it pushed out", async () => {
+    let imports = ["F1", "F2", "F3", "F4", "P5"].map((id) => importEntry(id, id.startsWith("P") ? "partial" : "failed", id.startsWith("P") ? { imported: 1, failed: 1 } : { failed: 1 }))
+    const dismissed: unknown[] = []
+    mockIPC((command, args) => {
+      if (command === "import_list") return imports
+      if (command === "import_dismiss") {
+        const { id } = args as { id: string }
+        dismissed.push(id)
+        imports = imports.filter((entry) => entry.id !== id)
+        return null
+      }
+      if (command === "library_list_locations") return [homeLocation("loc-1", "Captures")]
+      if (command === "library_new_captures") return { locations: [{ locationId: "loc-1", newFiles: 0, live: true }] }
+      return emptyHome(command)
+    })
+    const { user } = renderAt("/")
+    const section = await screen.findByRole("table", { name: m.home_ingestions() })
+    expect(await within(section).findAllByRole("button", { name: m.verb_dismiss() })).toHaveLength(5)
+    expect(within(section).queryByText(m.home_never_scanned())).toBeNull()
+    await user.click(within(section).getAllByRole("button", { name: m.verb_dismiss() })[0] as HTMLElement)
+    expect(await within(section).findByText(m.home_never_scanned())).toBeInTheDocument()
+    expect(dismissed).toEqual(["F1"])
+    expect(within(section).getAllByRole("button", { name: m.verb_dismiss() })).toHaveLength(4)
   })
 
   it("shows each location's free space with the low-space flag, and unknown, never zero, while offline", async () => {

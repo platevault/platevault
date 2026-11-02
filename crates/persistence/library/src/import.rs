@@ -15,8 +15,8 @@ use platevault_model::{
     CaptureMetadata, EntryEvidence, ExpectedSession, FileIdentity, ImportBlock, ImportChoice,
     ImportDraft, ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord, ImportMode,
     ImportRecord, ImportRig, ImportState, ImportTargetChoice, IssueKind, ItemReason, LibraryError,
-    LocationRole, NamingFallback, NamingFrameType, NativePath, ObservationFingerprint, Revision,
-    SavedSource, SettleObservation, SplitLimits, StorageRef, UnknownFilter,
+    LocationRole, NamingFallback, NamingFrameType, NativePath, ObservationFingerprint, ReasonCode,
+    Revision, SavedSource, SettleObservation, SplitLimits, StorageRef, UnknownFilter,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -159,8 +159,12 @@ impl Catalog {
 
     /// The imports in `states`, most recently updated first, read in one
     /// snapshot. With `settled_with_failures`, a Settled import is read only
-    /// when one of its items Failed or stayed Uncertain, so a list of failed
-    /// and partial imports never loads every import that settled cleanly.
+    /// when it falls short (`ImportSummary::falls_short`): an item Failed or
+    /// stayed Uncertain, or kept its source with a verification reason, so a
+    /// list of failed and partial imports never loads every import that
+    /// settled cleanly. An import whose issue ([`IssueKind::of_import`]) the
+    /// user dismissed is left out: an interrupted one until Retry forgets the
+    /// dismissal, a settled one for good.
     ///
     /// # Errors
     /// `PersistenceFailure` for an unreadable record.
@@ -172,19 +176,28 @@ impl Catalog {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
         let rows = sqlx::query(
-            "SELECT o.id FROM import_operations o \
+            "SELECT o.id, o.state FROM import_operations o \
              WHERE o.state IN (SELECT value FROM json_each(?1)) \
              AND (?2 = 0 OR o.state <> 'settled' OR EXISTS (SELECT 1 FROM import_items i \
-                 WHERE i.op_id = o.id AND i.phase IN ('failed', 'uncertain'))) \
+                 WHERE i.op_id = o.id AND (i.phase IN ('failed', 'uncertain') \
+                 OR (i.phase = 'source_kept' AND json_extract(i.reason, '$.code') IN \
+                     (SELECT value FROM json_each(?3)))))) \
              ORDER BY o.updated_at DESC, o.id",
         )
         .bind(to_json(&states)?)
         .bind(settled_with_failures)
+        .bind(to_json(&ReasonCode::VERIFICATION)?)
         .fetch_all(&mut *snapshot)
         .await?;
+        let dismissed = issues::dismissals(&mut snapshot).await?;
         let mut records = Vec::with_capacity(rows.len());
         for row in &rows {
             let id = parse_uuid(&row.try_get::<String, _>("id")?)?;
+            let state: ImportState = from_text(&row.try_get::<String, _>("state")?)?;
+            let issue = IssueKind::of_import(state);
+            if issue.is_some_and(|kind| issues::is_dismissed(&dismissed, kind, id)) {
+                continue;
+            }
             records.push(load_import(&mut snapshot, id).await?);
         }
         snapshot.rollback().await?;

@@ -1316,6 +1316,15 @@ export const commands = {
 	 */
 	importList: (states: ImportListState[]) => typedError<ImportListEntry[], ErrorResponse>(__TAURI_INVOKE("import_list", { states })),
 	/**
+	 *  Dismiss a settled import that failed or only partly completed, so
+	 *  `import_list` no longer lists it (Home Pending ingestions).
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown import; `InvalidInput` for a preview, a running
+	 *  or interrupted import and one that settled cleanly.
+	 */
+	importDismiss: (id: string) => typedError<null, ErrorResponse>(__TAURI_INVOKE("import_dismiss", { id })),
+	/**
 	 *  Merge the sessions holding `seqs` (an item of each) into one before the
 	 *  import starts; only sessions that differ in framing alone merge.
 	 * 
@@ -4850,9 +4859,11 @@ export type ImportListEntry = {
 };
 
 /**
- *  Where a started import stands, as its list reads it. A settled import is
- *  Failed when nothing came across and an item failed or stayed uncertain,
- *  Partial when some items came across and some did not, otherwise Settled.
+ *  Where a started import stands, as its list reads it. A settled import
+ *  falls short when an item Failed, stayed Uncertain, or kept its source
+ *  because the source or its kept copy failed verification (the run page's
+ *  partial rule, [`ImportSummary::falls_short`]). It is then Failed when
+ *  nothing came across and Partial when something did, otherwise Settled.
  */
 export type ImportListState = "running" | "interrupted" | "failed" | "partial" | "settled";
 
@@ -5380,7 +5391,10 @@ export type IssueKind =
 "location-denied" | 
 /**  A location that is offline or whose root is missing. */
 "location-offline" | 
-/**  A scan, measurement run or Apply that failed. */
+/**
+ *  A scan, measurement run or Apply that failed, or an import that
+ *  settled failed or partial (its Home row only; see [`Self::of_import`]).
+ */
 "work-failed" | 
 /**  An import or measurement run left unfinished. */
 "work-interrupted" | 
@@ -5571,6 +5585,12 @@ export type Location = {
 	 *  the catalog returns without a probe report `None` too.
 	 */
 	freeBytes: number | null,
+	/**
+	 *  Used bytes on the location's volume (its capacity less its free
+	 *  blocks) when the list was read; `None` exactly when
+	 *  [`Self::free_bytes`] is.
+	 */
+	usedBytes: number | null,
 	/**
 	 *  Free space is under the low-space share of the volume's capacity;
 	 *  `None` exactly when [`Self::free_bytes`] is.

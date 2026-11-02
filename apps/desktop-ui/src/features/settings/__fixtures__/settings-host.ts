@@ -24,6 +24,7 @@ export function location(id: string, name: string, role: LocationState["location
       decisionRevision: 1,
       availability: "available",
       freeBytes: null,
+      usedBytes: null,
       lowSpace: null,
       lastObservedAt: null,
       lifecycle: "active",

@@ -4,9 +4,9 @@
 //! IPC tests for import review (LIB-FR-04/24, D-W107, D-W129; CF2 owner
 //! answer of 2026-10-20): merge and re-split, the read-only split preview,
 //! the import's own centre and rotation limits and each session's Target,
-//! and Home's import list (PRJ-FR-17 section 1), run through Tauri's mock
-//! runtime with JSON arguments as the webview sends them. A refusal is a
-//! library `ErrorResponse` code naming the import.
+//! and Home's import list and its Dismiss (PRJ-FR-17 section 1), run
+//! through Tauri's mock runtime with JSON arguments as the webview sends
+//! them. A refusal is a library `ErrorResponse` code naming the import.
 
 mod support;
 
@@ -15,7 +15,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use platevault_core::library::Library;
-use platevault_core::{ImportMode, LibraryErrorCode, LocationRole, NativePath};
+use platevault_core::{
+    ImportItemPhase, ImportItemRecord, ImportMode, ImportState, LibraryErrorCode, LocationRole,
+    NativePath,
+};
 use serde_json::{json, Value};
 use support::Ipc;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
@@ -105,6 +108,7 @@ impl Shell {
                 desktop_shell::commands::import::import_set_split_limits,
                 desktop_shell::commands::import::import_choose_target,
                 desktop_shell::commands::import::import_list,
+                desktop_shell::commands::import::import_dismiss,
             ])
             .build(mock_context(noop_assets()))
             .expect("build mock app");
@@ -301,4 +305,42 @@ fn the_import_list_reads_started_imports_by_state_over_ipc() {
     let refused =
         shell.invoke("import_list", &json!({ "states": ["previewed"] })).expect_err("previewed");
     assert!(refused.is_string(), "a state the list never reads is refused: {refused}");
+}
+
+/// Home's Dismiss (owner's answer, 2026-11-02): `import_dismiss` takes a
+/// settled import that failed off `import_list`, and refuses a running one
+/// or an unknown id, naming it.
+#[test]
+fn import_dismiss_takes_a_failed_import_off_the_list_over_ipc() {
+    let shell = Shell::new();
+    let preview = shell.preview();
+    let id = id_of(&preview);
+    let library = Arc::clone(shell.webview.state::<Arc<Library>>().inner());
+    let revision = preview["revision"].as_u64().expect("revision");
+    tauri::async_runtime::block_on(library.start_import(id, revision, ImportMode::Copy))
+        .expect("start the import");
+    shell.refuses("import_dismiss", &json!({ "id": id }), LibraryErrorCode::InvalidInput, id);
+    let unknown = Uuid::new_v4();
+    shell.refuses("import_dismiss", &json!({ "id": unknown }), LibraryErrorCode::NotFound, unknown);
+
+    tauri::async_runtime::block_on(async {
+        let catalog = library.catalog();
+        let record = catalog.import_record(id).await.expect("the import");
+        let failed: Vec<ImportItemRecord> = record
+            .items
+            .into_iter()
+            .filter(|record| record.item.phase == ImportItemPhase::Pending)
+            .map(|mut record| {
+                record.item.phase = ImportItemPhase::Failed;
+                record
+            })
+            .collect();
+        catalog.record_import_progress(id, &failed).await.expect("record the failures");
+        catalog.set_import_state(id, ImportState::Settled).await.expect("settle");
+    });
+    let failed = json!({ "states": ["failed", "partial"] });
+    let listed = shell.call("import_list", &failed);
+    assert_eq!(listed[0]["state"], json!("failed"), "{listed}");
+    assert_eq!(shell.call("import_dismiss", &json!({ "id": id })), Value::Null);
+    assert_eq!(shell.call("import_list", &failed), json!([]), "dismissed");
 }

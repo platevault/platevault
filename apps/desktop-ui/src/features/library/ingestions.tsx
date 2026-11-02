@@ -1,8 +1,10 @@
 /**
  * Home's Pending ingestions (PRJ-FR-17 section 1): per Captures location,
  * new files since its last scan, a location never scanned or whose last
- * scan did not finish, and stopped or failed imports with Retry. A running
- * import changes its own row ("Importing 142 files · 40%").
+ * scan did not finish, stopped imports with Retry, and failed or partly
+ * completed ones with Dismiss (owner's answer, 2026-11-02): such a row
+ * stays until the user dismisses it. A running import changes its own row
+ * ("Importing 142 files · 40%").
  *
  * Offline is not absence: a Captures location that is offline, missing or
  * unreadable keeps its row with that state, since its new files cannot be
@@ -12,7 +14,7 @@
  * `library_new_captures` (refreshed on its event), each Captures
  * location's own last scan (`library_list_operations` for that location,
  * one row), and `import_list` for every running, interrupted, failed or
- * partial import, re-read each second while one runs.
+ * partial import not dismissed, re-read each second while one runs.
  */
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { FolderPlus } from "lucide-react"
@@ -146,17 +148,25 @@ export function IngestionsTable({ ingestions }: { ingestions: ReturnType<typeof 
   ]
   const primary = (r: IngestionRow): Action | null => {
     if (r.kind === "import") {
-      // Only an interrupted import resumes; a settled one has an outcome for every item, which its page shows.
-      if (r.entry.state !== "interrupted") return null
       const importId = r.entry.id
-      return {
-        id: "retry",
-        label: m.verb_retry(),
-        run: async () => {
-          const result = await importWrite(client, importId, () => library.importRetry(importId))
-          if (result.ok) follow(importRunLink(importId))
-          return result
-        },
+      switch (r.entry.state) {
+        case "interrupted":
+          return {
+            id: "retry",
+            label: m.verb_retry(),
+            run: async () => {
+              const result = await importWrite(client, importId, () => library.importRetry(importId))
+              if (result.ok) follow(importRunLink(importId))
+              return result
+            },
+          }
+        // A settled import has an outcome for every item, which its page shows; nothing resumes it.
+        case "failed":
+        case "partial":
+          return { id: "dismiss", label: m.verb_dismiss(), run: () => importWrite(client, importId, () => library.importDismiss(importId)) }
+        case "running":
+        case "settled":
+          return null
       }
     }
     switch (r.state.kind) {

@@ -345,11 +345,11 @@ impl Library {
     }
 
     /// Every registered location, each Active and Available one with its
-    /// volume's free space and low-space flag probed now through the root
-    /// check Import uses (Home Status, PRJ-FR-17 section 4), low under the
-    /// share the workflow settings' `storage` names. Both stay unknown,
-    /// never zero, for a retired or offline location and for a root or volume
-    /// that cannot be read.
+    /// volume's free and used space and low-space flag probed now through
+    /// the root check Import uses (Home Status, PRJ-FR-17 section 4;
+    /// Settings › Locations, LIB-FR-21), low under the share the workflow
+    /// settings' `storage` names. All stay unknown, never zero, for a retired
+    /// or offline location and for a root or volume that cannot be read.
     ///
     /// # Errors
     /// Catalog read failures, recorded workflow settings that are not valid
@@ -363,8 +363,9 @@ impl Library {
         })
         .await?;
         for (location, space) in locations.iter_mut().zip(spaces) {
-            location.free_bytes = space.map(|(free, _)| free);
-            location.low_space = space.map(|(_, low)| low);
+            location.free_bytes = space.map(|space| space.free);
+            location.used_bytes = space.map(|space| space.used);
+            location.low_space = space.map(|space| space.low);
         }
         Ok(locations)
     }
@@ -1148,10 +1149,19 @@ pub(crate) async fn blocking<T: Send + 'static>(
     })?
 }
 
-/// Free bytes on the volume of an Active, Available location and whether
-/// they are low under `storage`; `None` when the location is not probed or
-/// cannot be.
-fn volume_space(location: &Location, storage: StorageSettings) -> Option<(u64, bool)> {
+/// A probed volume: the bytes free to the user, the bytes in use (its
+/// capacity less its free blocks, as `df` counts them), and whether the
+/// free bytes are low under the workflow settings' share.
+#[derive(Clone, Copy)]
+struct VolumeSpace {
+    free: u64,
+    used: u64,
+    low: bool,
+}
+
+/// The volume space of an Active, Available location under `storage`;
+/// `None` when the location is not probed or cannot be.
+fn volume_space(location: &Location, storage: StorageSettings) -> Option<VolumeSpace> {
     if location.lifecycle != LocationLifecycle::Active
         || location.availability != Availability::Available
     {
@@ -1160,7 +1170,8 @@ fn volume_space(location: &Location, storage: StorageSettings) -> Option<(u64, b
     let root = mounted_root(location).ok()?;
     let free = fs4::available_space(&root).ok()?;
     let capacity = fs4::total_space(&root).ok().filter(|&capacity| capacity > 0)?;
-    Some((free, storage.is_low(free, capacity)))
+    let used = capacity.saturating_sub(fs4::free_space(&root).ok()?);
+    Some(VolumeSpace { free, used, low: storage.is_low(free, capacity) })
 }
 
 /// How a root that failed its identity check reads: Offline when it is gone,

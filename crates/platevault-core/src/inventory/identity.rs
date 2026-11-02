@@ -1314,6 +1314,7 @@ mod tests {
             decision_revision: 1,
             availability: crate::Availability::Available,
             free_bytes: None,
+            used_bytes: None,
             low_space: None,
             last_observed_at: None,
             lifecycle: crate::LocationLifecycle::Active,

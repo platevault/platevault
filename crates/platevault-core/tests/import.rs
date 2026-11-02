@@ -1804,22 +1804,173 @@ async fn the_import_list_reads_each_started_state_from_durable_status_and_filter
     assert_eq!(library.import_list(&[]).await.unwrap(), []);
 }
 
+/// The ids `import_list` reads in `states`, sorted.
+async fn listed(library: &Library, states: &[ImportListState]) -> Vec<Uuid> {
+    let mut ids: Vec<Uuid> =
+        library.import_list(states).await.unwrap().iter().map(|entry| entry.id).collect();
+    ids.sort();
+    ids
+}
+
+/// Home's Dismiss (owner's answer, 2026-11-02): a settled import that failed
+/// or partly completed leaves the import list once dismissed, also after a
+/// reopen, while its own page still reads it. A preview, a running, an
+/// interrupted or a cleanly settled import is refused with nothing recorded.
+#[tokio::test]
+async fn a_dismissed_failed_or_partial_import_leaves_the_import_list_across_a_reopen() {
+    use ImportListState::{Failed, Interrupted, Partial, Running, Settled};
+    let every = [Running, Interrupted, Failed, Partial, Settled];
+    let fixture = Fixture::new().await;
+    let failed = started(&fixture, "failed", &[20, 21]).await;
+    settle_with_failures(&fixture, &failed, 2).await;
+    let partial = started(&fixture, "partial", &[30, 31]).await;
+    settle_with_failures(&fixture, &partial, 1).await;
+    let running = started(&fixture, "running", &[0]).await;
+    let interrupted = started(&fixture, "interrupted", &[10]).await;
+    let clean = preview_of(&fixture, &card_with(&fixture, "settled", &[Pointed::at(40)])).await;
+    let settled = fixture.run(&clean, ImportMode::Copy, &fixture.trash()).await;
+    let previewed =
+        preview_of(&fixture, &card_with(&fixture, "previewed", &[Pointed::at(50)])).await;
+    let Fixture { temp, library, .. } = fixture;
+    library.catalog().set_import_state(interrupted.id, ImportState::Interrupted).await.unwrap();
+
+    for id in [previewed.id, running.id, interrupted.id, settled.id] {
+        let error = library.import_dismiss(id).await.unwrap_err();
+        assert_eq!(error.code(), LibraryErrorCode::InvalidInput, "{id}: {error:?}");
+    }
+    let unknown = library.import_dismiss(Uuid::new_v4()).await.unwrap_err();
+    assert_eq!(unknown.code(), LibraryErrorCode::NotFound, "{unknown:?}");
+    assert!(library.catalog().issue_dismissals().await.unwrap().is_empty(), "nothing recorded");
+
+    library.import_dismiss(failed.id).await.unwrap();
+    library.import_dismiss(partial.id).await.unwrap();
+    library.import_dismiss(partial.id).await.unwrap();
+    let mut kept = vec![running.id, interrupted.id, settled.id];
+    kept.sort();
+    assert_eq!(listed(&library, &every).await, kept, "the dismissed imports leave the list");
+    assert_eq!(listed(&library, &[Failed, Partial]).await, Vec::<Uuid>::new());
+    assert_eq!(
+        library.import_operation(failed.id).await.unwrap().state,
+        ImportState::Settled,
+        "its own page still reads it"
+    );
+    assert!(library.issues().await.unwrap().dismissed.is_empty(), "no current issue is hidden");
+    drop(library);
+
+    let reopened = Library::open(&temp.path().join("catalog.sqlite"), None).await.unwrap();
+    assert_eq!(listed(&reopened, &every).await, kept, "kept across a reopen");
+}
+
+/// Before Home read `import_list` it took stopped imports from the issues
+/// not dismissed, so a dismissed interrupted-import issue (D-W158) hid the
+/// row; the list keeps that. Retry forgets the dismissal, so interrupting
+/// the import again lists it again.
+#[tokio::test]
+async fn a_dismissed_interrupted_import_issue_leaves_the_import_list_until_retry() {
+    use ImportListState::{Interrupted, Running};
+    let fixture = Fixture::new().await;
+    let library = &fixture.library;
+    let catalog = library.catalog();
+    let import = started(&fixture, "interrupted", &[10]).await;
+    catalog.set_import_state(import.id, ImportState::Interrupted).await.unwrap();
+    assert_eq!(listed(library, &[Interrupted]).await, [import.id]);
+
+    let view = library.issues().await.unwrap();
+    let issue = view
+        .issues
+        .iter()
+        .find(|issue| {
+            issue.kind == IssueKind::WorkInterrupted
+                && issue.owner == IssueOwner::Operation { id: import.id }
+        })
+        .unwrap_or_else(|| panic!("the interrupted import's issue: {view:#?}"));
+    library.dismiss_issue(&issue.fingerprint).await.unwrap();
+    assert_eq!(
+        listed(library, &[Interrupted]).await,
+        Vec::<Uuid>::new(),
+        "its dismissed issue hides it"
+    );
+
+    catalog.set_import_state(import.id, ImportState::Running).await.unwrap();
+    assert_eq!(listed(library, &[Running]).await, [import.id], "a running import has no issue");
+    catalog.set_import_state(import.id, ImportState::Interrupted).await.unwrap();
+    assert_eq!(listed(library, &[Interrupted]).await, [import.id], "Retry forgot the dismissal");
+}
+
+/// One rule for falling short: a Move import that kept a source whose kept
+/// copy is unproven reads Partial in the import list, through the catalog's
+/// prefilter too, as its run page reads it partial (`failed_verification`).
+/// A source kept for another reason (no OS Trash) falls short of nothing.
+#[tokio::test]
+async fn a_settled_import_that_kept_an_unproven_source_reads_partial() {
+    use ImportListState::{Failed, Partial, Settled};
+    let fixture = Fixture::new().await;
+    let library = &fixture.library;
+    let catalog = library.catalog();
+    let mut imports = Vec::new();
+    for (name, code) in
+        [("unproven", ReasonCode::KeptCopyUnproven), ("no-trash", ReasonCode::TrashUnsupported)]
+    {
+        let shots = [Pointed::at(60), Pointed::at(61)];
+        let preview = preview_of(&fixture, &card_with(&fixture, name, &shots)).await;
+        let import =
+            library.start_import(preview.id, preview.revision, ImportMode::Move).await.unwrap();
+        let record = catalog.import_record(import.id).await.unwrap();
+        let outcomes: Vec<ImportItemRecord> = record
+            .items
+            .into_iter()
+            .filter(|record| record.item.phase == ImportItemPhase::Pending)
+            .enumerate()
+            .map(|(index, mut record)| {
+                record.item.landed = true;
+                if index == 0 {
+                    record.item.phase = ImportItemPhase::SourceKept;
+                    record.item.reason = Some(ItemReason::new(code, "kept"));
+                } else {
+                    record.item.phase = ImportItemPhase::Moved;
+                }
+                record
+            })
+            .collect();
+        assert_eq!(outcomes.len(), 2, "{name}");
+        catalog.record_import_progress(import.id, &outcomes).await.unwrap();
+        catalog.set_import_state(import.id, ImportState::Settled).await.unwrap();
+        imports.push(import.id);
+    }
+    let [unproven, no_trash] = imports[..] else { unreachable!() };
+
+    let summary = library.import_operation(unproven).await.unwrap().summary;
+    assert_eq!(
+        (summary.imported, summary.failed, summary.uncertain, summary.failed_verification),
+        (2, 0, 0, 1),
+        "the run page reads it partial"
+    );
+    assert_eq!(listed(library, &[Partial]).await, [unproven], "the prefilter reads it");
+    assert_eq!(listed(library, &[Failed]).await, Vec::<Uuid>::new());
+    assert_eq!(listed(library, &[Settled]).await, [no_trash]);
+    library.import_dismiss(unproven).await.unwrap();
+    assert_eq!(listed(library, &[Partial]).await, Vec::<Uuid>::new());
+}
+
 #[tokio::test]
 async fn a_location_reports_its_free_space_until_it_cannot_be_probed_then_unknown() {
     let fixture = Fixture::new().await;
     let captures = |locations: Vec<Location>| {
         let location =
             locations.into_iter().find(|location| location.id == fixture.captures_id).unwrap();
-        (location.free_bytes, location.low_space)
+        (location.free_bytes, location.used_bytes, location.low_space)
     };
-    let (free, low) = captures(fixture.library.list_locations().await.unwrap());
-    assert!(free.is_some() && low.is_some(), "an online location is probed: {free:?} {low:?}");
+    let (free, used, low) = captures(fixture.library.list_locations().await.unwrap());
+    assert!(
+        free.is_some() && used.is_some_and(|used| used > 0) && low.is_some(),
+        "an online location is probed: {free:?} {used:?} {low:?}"
+    );
 
     let moved = fixture.temp.path().join("Captures elsewhere");
     fs::rename(&fixture.captures, &moved).unwrap();
     assert_eq!(
         captures(fixture.library.list_locations().await.unwrap()),
-        (None, None),
+        (None, None, None),
         "a root that fails validation is unknown, never zero"
     );
     fs::rename(&moved, &fixture.captures).unwrap();
@@ -1832,7 +1983,7 @@ async fn a_location_reports_its_free_space_until_it_cannot_be_probed_then_unknow
         .unwrap();
     assert_eq!(
         captures(fixture.library.list_locations().await.unwrap()),
-        (None, None),
+        (None, None, None),
         "an offline location is unknown, never zero"
     );
 }
@@ -1840,29 +1991,24 @@ async fn a_location_reports_its_free_space_until_it_cannot_be_probed_then_unknow
 /// PRJ-FR-17 item 4 (owner's answer, 2026-11-02): a Location is low on space
 /// under the share Settings › Locations saves, 10% of its volume's capacity
 /// by default; the share survives a reopen, and one outside 1 to 50 is
-/// refused naming `storage.lowSpacePercent` with nothing stored.
+/// refused naming `storage.lowSpacePercent` with nothing stored. Wiring
+/// only: the test volume's free share is not this test's to move, so the
+/// boundary itself is the `library.rs` unit test's.
 #[tokio::test]
 async fn a_location_is_low_under_the_saved_share_of_its_volume_which_defaults_to_10() {
-    let Fixture { temp, library, captures, captures_id, .. } = Fixture::new().await;
-    let low = |locations: Vec<Location>| {
-        locations.into_iter().find(|location| location.id == captures_id).unwrap().low_space
+    let Fixture { temp, library, captures_id, .. } = Fixture::new().await;
+    let probed = |locations: Vec<Location>| {
+        let location = locations.into_iter().find(|location| location.id == captures_id).unwrap();
+        location.low_space.is_some() && location.used_bytes.is_some()
     };
-    let volume =
-        || (fs4::available_space(&captures).unwrap(), fs4::total_space(&captures).unwrap());
     let record = library.workflow_settings().await.unwrap();
     assert_eq!(
         (record.settings.storage, record.revision),
         (StorageSettings { low_space_percent: 10 }, 0),
         "10% by default, with nothing saved"
     );
-    let (free, capacity) = volume();
-    assert_eq!(
-        low(library.list_locations().await.unwrap()),
-        Some(record.settings.storage.is_low(free, capacity))
-    );
+    assert!(probed(library.list_locations().await.unwrap()), "probed under the default share");
 
-    // The volume's free share, rounded down: low just above it, not at it.
-    let share = u32::try_from(u128::from(free) * 100 / u128::from(capacity)).unwrap();
     let save = |percent: u32, expected: Revision| {
         let library = Arc::clone(&library);
         async move {
@@ -1874,21 +2020,11 @@ async fn a_location_is_low_under_the_saved_share_of_its_volume_which_defaults_to
         }
     };
     let mut revision = 0;
-    for (percent, expected) in [(share + 1, true), (share, false)] {
-        if !StorageSettings::LOW_SPACE_PERCENT.contains(&percent) {
-            continue;
-        }
+    for percent in [1, 50] {
         revision = save(percent, revision).await.unwrap().revision;
-        assert_eq!(
-            low(library.list_locations().await.unwrap()),
-            Some(expected),
-            "{percent}% with {share}% free"
-        );
+        assert!(probed(library.list_locations().await.unwrap()), "probed under {percent}%");
     }
-    revision = save(50, revision).await.unwrap().revision;
-    let (free, capacity) = volume();
     let at_50 = StorageSettings { low_space_percent: 50 };
-    assert_eq!(low(library.list_locations().await.unwrap()), Some(at_50.is_low(free, capacity)));
 
     for refused in [0, 51] {
         let error = save(refused, revision).await.unwrap_err();
@@ -1908,6 +2044,5 @@ async fn a_location_is_low_under_the_saved_share_of_its_volume_which_defaults_to
         (at_50, revision),
         "kept across a reopen; no refusal stored"
     );
-    let (free, capacity) = volume();
-    assert_eq!(low(reopened.list_locations().await.unwrap()), Some(at_50.is_low(free, capacity)));
+    assert!(probed(reopened.list_locations().await.unwrap()), "probed after a reopen");
 }

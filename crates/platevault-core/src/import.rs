@@ -58,7 +58,7 @@ use crate::{
     ImportDuplicate, ImportItem, ImportItemPhase, ImportItemRecord, ImportListEntry,
     ImportListState, ImportMode, ImportOperation, ImportRecord, ImportRig, ImportSession,
     ImportSessionTarget, ImportSourceSpec, ImportState, ImportSummary, ImportTargetChoice,
-    InputKind, ItemOutcome, ItemPhase, ItemReason, KeptCopy, LibraryError, Location,
+    InputKind, IssueKind, ItemOutcome, ItemPhase, ItemReason, KeptCopy, LibraryError, Location,
     LocationLifecycle, LocationRole, NamingFrameType, NamingMetadata, NativePath,
     ObservationFingerprint, Provenance, ReasonCode, RigFilters, SavedSource, SavedSourceView,
     ScanOperation, ScanState, SettleObservation, SplitLimits, StorageItem, StorageItemDraft,
@@ -530,8 +530,10 @@ impl Library {
 
     /// Every started import in `states`, most recently updated first, from
     /// its durable operation and item status (Home Pending ingestions,
-    /// PRJ-FR-17 section 1). A preview is never listed; see
-    /// [`ImportListState`] for how a settled import reads.
+    /// PRJ-FR-17 section 1). A preview is never listed, nor an import whose
+    /// issue the user dismissed: a failed or partial one through
+    /// [`Self::import_dismiss`], an interrupted one on its issue row until
+    /// Retry (D-W158). See [`ImportListState`] for how a settled import reads.
     ///
     /// # Errors
     /// `PersistenceFailure` for an unreadable catalog.
@@ -568,6 +570,39 @@ impl Library {
                 })
             })
             .collect())
+    }
+
+    /// Dismiss a settled import that failed or only partly completed: Home's
+    /// Pending ingestions stops listing it (owner's answer, 2026-11-02). Its
+    /// failed-work issue is recorded dismissed (D-W158); a settled import
+    /// never changes again, so it stays dismissed. Dismissing it again keeps
+    /// the first record. Nothing else changes; its own page still shows it.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown import; `InvalidInput` for a preview, a
+    /// running or interrupted import (which Retry resumes) and one that
+    /// settled cleanly; `PersistenceFailure` when the catalog cannot be read
+    /// or written.
+    pub async fn import_dismiss(&self, id: Uuid) -> Result<(), LibraryError> {
+        let record = self.catalog().import_record(id).await?;
+        let items: Vec<ImportItem> = record.items.into_iter().map(|item| item.item).collect();
+        let refused = match list_state(record.state, &summarize(&items)) {
+            Some(ImportListState::Failed | ImportListState::Partial) => None,
+            None => Some("a preview has not run"),
+            Some(ImportListState::Running) => Some("a running import can't be dismissed"),
+            Some(ImportListState::Interrupted) => {
+                Some("an interrupted import waits for Retry and can't be dismissed")
+            }
+            Some(ImportListState::Settled) => {
+                Some("a cleanly settled import has nothing to dismiss")
+            }
+        };
+        if let Some(refused) = refused {
+            return Err(LibraryError::InvalidInput(refused.into()));
+        }
+        // `IssueKind::of_import(Settled)`, the issue the import list filters on.
+        let issue = crate::issues::on_operation(IssueKind::WorkFailed, id, None);
+        self.catalog().dismiss_issue(&issue.fingerprint).await
     }
 
     async fn preview_record(
@@ -2275,16 +2310,16 @@ const fn counts_toward(phase: ImportItemPhase) -> bool {
     )
 }
 
-/// How a started import reads in its list; `None` for a preview. Only a
-/// Failed or Uncertain item makes a settled import Failed or Partial, the
-/// rule [`persistence_library::Catalog::import_records`] prefilters on.
+/// How a started import reads in its list; `None` for a preview. A settled
+/// import that [falls short](ImportSummary::falls_short) is Failed or
+/// Partial, the rule [`persistence_library::Catalog::import_records`]
+/// prefilters on and the run page reads as partial.
 fn list_state(state: ImportState, summary: &ImportSummary) -> Option<ImportListState> {
-    let lost = summary.failed + summary.uncertain;
     Some(match state {
         ImportState::Previewed => return None,
         ImportState::Running => ImportListState::Running,
         ImportState::Interrupted => ImportListState::Interrupted,
-        ImportState::Settled if lost == 0 => ImportListState::Settled,
+        ImportState::Settled if !summary.falls_short() => ImportListState::Settled,
         ImportState::Settled if summary.imported == 0 => ImportListState::Failed,
         ImportState::Settled => ImportListState::Partial,
     })
@@ -2311,15 +2346,10 @@ fn summarize(items: &[ImportItem]) -> ImportSummary {
             ImportItemPhase::Copied => continue,
         };
         *count += 1;
-        let verification = item.reason.as_ref().is_some_and(|reason| {
-            matches!(
-                reason.code,
-                ReasonCode::DestinationMismatch
-                    | ReasonCode::DestinationChanged
-                    | ReasonCode::SourceDrift
-                    | ReasonCode::KeptCopyUnproven
-            )
-        });
+        let verification = item
+            .reason
+            .as_ref()
+            .is_some_and(|reason| ReasonCode::VERIFICATION.contains(&reason.code));
         if verification
             && matches!(item.phase, ImportItemPhase::SourceKept | ImportItemPhase::Failed)
         {

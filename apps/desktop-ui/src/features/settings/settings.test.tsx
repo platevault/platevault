@@ -324,10 +324,10 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
   )
 
   it(
-    "saves the Low space share, refuses one outside 1 to 50, and the location's Low space badge follows the saved share",
+    "shows the volume's used space, saves the Low space share, refuses one outside 1 to 50, and the location's Low space badge follows the saved share",
     async () => {
       const capacity = 1_000_000_000_000
-      const host = settingsHost(catalog({ locations: [location("loc-1", "Lights", "captures", { freeBytes: 150_000_000_000, lowSpace: false })] }))
+      const host = settingsHost(catalog({ locations: [location("loc-1", "Lights", "captures", { freeBytes: 150_000_000_000, usedBytes: 850_000_000_000, lowSpace: false })] }))
       // The library flags a location low under the saved share of its volume's capacity.
       mockIPC((command, args) => {
         const answer = host.handler(command, args)
@@ -338,6 +338,7 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       const { user } = renderAt("/settings/locations")
       const row = (await screen.findByRole("rowheader", { name: "Lights" })).closest("tr") as HTMLElement
       expect(within(row).getByText(m.import_free({ size: formatBytes(150_000_000_000) }))).toBeInTheDocument()
+      expect(within(row).getByText(formatBytes(850_000_000_000))).toBeInTheDocument()
       expect(within(row).queryByText(m.status_low_space())).toBeNull()
       expect(await screen.findByText(m.settings_value_percent({ value: "10" }))).toBeInTheDocument()
 

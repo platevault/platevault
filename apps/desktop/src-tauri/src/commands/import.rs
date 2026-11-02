@@ -13,7 +13,7 @@
 //! runs the import in the background on the host OS Trash; `import_status`
 //! reads its durable progress and `import_list` every started import's
 //! state and counts. Retry resumes an interrupted import from its recorded
-//! journal.
+//! journal; Dismiss takes a failed or partial one off that list.
 
 use std::sync::Arc;
 
@@ -287,4 +287,16 @@ pub async fn import_list(
     states: Vec<ImportListState>,
 ) -> Reply<Vec<ImportListEntry>> {
     library.import_list(&states).await.map_err(fail(None))
+}
+
+/// Dismiss a settled import that failed or only partly completed, so
+/// `import_list` no longer lists it (Home Pending ingestions).
+///
+/// # Errors
+/// `NotFound` for an unknown import; `InvalidInput` for a preview, a running
+/// or interrupted import and one that settled cleanly.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_dismiss(library: State<'_, Arc<Library>>, id: Uuid) -> Reply<()> {
+    library.import_dismiss(id).await.map_err(fail(Some(id)))
 }

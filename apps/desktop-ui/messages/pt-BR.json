@@ -5692,6 +5692,7 @@
   "location_col_indexed": "Indexado",
   "location_col_frames": "Frames",
   "location_col_size": "Tamanho",
+  "location_col_used": "Usado",
   "location_col_free": "Livre",
   "location_free_of": "{free} de {capacity}",
   "location_offline_count": [

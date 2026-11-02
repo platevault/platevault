@@ -5310,6 +5310,7 @@
   "location_col_indexed": "Indexed",
   "location_col_frames": "Frames",
   "location_col_size": "Size",
+  "location_col_used": "Used",
   "location_col_free": "Free",
   "location_free_of": "{free} of {capacity}",
   "location_offline_count": [

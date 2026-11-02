@@ -908,7 +908,8 @@ fn library_data_location_returns_the_native_catalog_directory() {
 }
 
 /// Home Status (PRJ-FR-17 section 4): an online location carries its
-/// volume's free space and low-space flag; an offline one reads unknown.
+/// volume's free and used space and low-space flag; an offline one reads
+/// unknown.
 #[test]
 fn library_list_locations_carries_the_volume_free_space_until_offline() {
     let shell = Shell::new();
@@ -920,10 +921,11 @@ fn library_list_locations_carries_the_volume_free_space_until_offline() {
             .as_array()
             .and_then(|states| states.iter().find(|state| state["location"]["id"] == json!(id)))
             .unwrap_or_else(|| panic!("the location is listed: {listed}"));
-        (state["location"]["freeBytes"].clone(), state["location"]["lowSpace"].clone())
+        let location = &state["location"];
+        (location["freeBytes"].clone(), location["usedBytes"].clone(), location["lowSpace"].clone())
     };
-    let (free, low) = location(&shell.call("library_list_locations", &json!({})));
-    assert!(free.is_u64() && low.is_boolean(), "online: {free} {low}");
+    let (free, used, low) = location(&shell.call("library_list_locations", &json!({})));
+    assert!(free.is_u64() && used.is_u64() && low.is_boolean(), "online: {free} {used} {low}");
 
     let library = shell.library();
     tauri::async_runtime::block_on(library.catalog().mark_location_unavailable(
@@ -932,8 +934,12 @@ fn library_list_locations_carries_the_volume_free_space_until_offline() {
         "ejected",
     ))
     .expect("mark offline");
-    let (free, low) = location(&shell.call("library_list_locations", &json!({})));
-    assert_eq!((free, low), (Value::Null, Value::Null), "offline is unknown, never zero");
+    let (free, used, low) = location(&shell.call("library_list_locations", &json!({})));
+    assert_eq!(
+        (free, used, low),
+        (Value::Null, Value::Null, Value::Null),
+        "offline is unknown, never zero"
+    );
 }
 
 /// PRJ-FR-17 item 4: the low-space share is `storage.lowSpacePercent` of the
