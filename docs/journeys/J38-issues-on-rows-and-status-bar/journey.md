@@ -24,7 +24,7 @@ running, and the notifications history. Done means:
 - An offline drive, interrupted work and a duplicates result raise their issue. Reconnecting the drive and retrying the work clear it without any other action.
 - Running work shows with its progress, and "Idle" shows when nothing runs. Cancel appears on hover or keyboard focus.
 - With no issues the bar shows only a muted ✓. A counter never reads 0.
-- Dismissing an issue (×) on its row hides it from the counts until it changes, and leaves the state behind it unchanged. Show dismissed on the owning page lists it with Restore. Every issue has a row-level Dismiss action.
+- Dismissing an issue (×) on its row hides it from the counts until it changes, and leaves the state behind it unchanged. Show dismissed on the owning page lists it with Restore. Every issue has a row-level Dismiss action, except the "N in View (previous)" issue, which settles only through Keep, Move or Trash (P-ISS1; owner's answer, 2026-11-02).
 - Choosing a counter or opening the notification history changes no file, catalog record or Project.
 
 ## Preconditions
@@ -108,7 +108,7 @@ running, and the notifications history. Done means:
 
 - **Do:** On the affected rows, read which issues have an ×. Dismiss `1 to stack` on the 2 Oct Ha flat process row and `1 master offered` on `M 31 OSC`'s Output row. Read the counters. Then turn on **Show dismissed** on the Calibration library, choose Restore on the flat process row, and do the same on the Project's Output step.
 - **Expect:**
-  - Every issue has an × with the tooltip "Dismiss".
+  - Every issue has an × with the tooltip "Dismiss", except an "N in View (previous)" issue, which has none.
   - After both dismissals, ℹ reads 1, while ⛔ 1 and ⚠ 3 are unchanged, and the ℹ counter opens Sessions filtered to `4 Oct M 33` directly.
   - The rows keep their state: the 2 Oct Ha flat process still awaits Stack, and `M 31 OSC`'s Output step still shows its pending master offer with Add to calibration library and Hide actions.
   - With Show dismissed on, each page lists its dismissed issue on its row with **Restore**. After the first Restore ℹ reads 2, and after the second it reads 3.
