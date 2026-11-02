@@ -12,10 +12,11 @@ import { clearMocks, mockIPC } from "@tauri-apps/api/mocks"
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import type { LocationState } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
 import { setLocale } from "@/app/preferences"
 import { AppRoot } from "@/app/root"
-import { formatCount, formatList } from "@/lib/format"
+import { formatBytes, formatCount, formatList } from "@/lib/format"
 import { DEFAULT_LOCALE, LOCALES, m } from "@/lib/i18n"
 import { createAppRouter } from "@/routes"
 import { CRITERIA, catalog, location, nativePath, scan, settingsHost } from "./__fixtures__/settings-host"
@@ -318,6 +319,48 @@ describe.each(LOCALES)("Settings in %s", (locale) => {
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
       expect(host.sent("library_apply_remap")).toEqual([{ reviewId: host.state.reviews[1]?.id, expectedRevision: 6 }])
       expect(await within(row).findByText("/Volumes/Cold-1/Lights")).toBeInTheDocument()
+    },
+    TEST_MS,
+  )
+
+  it(
+    "shows the volume's used space, saves the Low space share, refuses one outside 1 to 50, and the location's Low space badge follows the saved share",
+    async () => {
+      const capacity = 1_000_000_000_000
+      const host = settingsHost(catalog({ locations: [location("loc-1", "Lights", "captures", { freeBytes: 150_000_000_000, usedBytes: 850_000_000_000, lowSpace: false })] }))
+      // The library flags a location low under the saved share of its volume's capacity.
+      mockIPC((command, args) => {
+        const answer = host.handler(command, args)
+        if (command !== "library_list_locations") return answer
+        const share = host.state.workflow.settings.storage.lowSpacePercent
+        return (answer as LocationState[]).map((s) => ({ ...s, location: { ...s.location, lowSpace: (s.location.freeBytes ?? 0) * 100 < capacity * share } }))
+      })
+      const { user } = renderAt("/settings/locations")
+      const row = (await screen.findByRole("rowheader", { name: "Lights" })).closest("tr") as HTMLElement
+      expect(within(row).getByText(m.import_free({ size: formatBytes(150_000_000_000) }))).toBeInTheDocument()
+      expect(within(row).getByText(formatBytes(850_000_000_000))).toBeInTheDocument()
+      expect(within(row).queryByText(m.status_low_space())).toBeNull()
+      expect(await screen.findByText(m.settings_value_percent({ value: "10" }))).toBeInTheDocument()
+
+      await user.click(screen.getByRole("button", { name: named(m.settings_edit()) }))
+      const dialog = await screen.findByRole("dialog", { name: m.status_low_space() })
+      const share = within(dialog).getByLabelText(label(m.settings_low_space_below(), m.settings_unit_percent()))
+      await user.clear(share)
+      await user.type(share, "51")
+      expect(await within(dialog).findByText(m.settings_low_space_range())).toBeInTheDocument()
+      expect(within(dialog).getByRole("button", { name: m.settings_save() })).toHaveAttribute("aria-disabled", "true")
+      expect(host.sent("workflow_settings_save")).toEqual([])
+
+      await user.clear(share)
+      await user.type(share, "20")
+      const reads = host.sent("library_list_locations").length
+      await user.click(within(dialog).getByRole("button", { name: m.settings_save() }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+      const [sent] = host.sent("workflow_settings_save") as { settings: { storage: unknown }; expectedRevision: number }[]
+      expect(sent).toMatchObject({ settings: { storage: { lowSpacePercent: 20 } }, expectedRevision: 5 })
+      await waitFor(() => expect(host.sent("library_list_locations").length).toBeGreaterThan(reads))
+      expect(await within(row).findByText(m.status_low_space())).toBeInTheDocument()
+      expect(await screen.findByText(m.settings_value_percent({ value: "20" }))).toBeInTheDocument()
     },
     TEST_MS,
   )

@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::frame_review::FrameReview;
 use crate::grouping::Intake;
+use crate::import::mounted_root;
 use crate::inventory;
 use crate::patched_copy::{self, EntryFrame};
 use crate::projects::{CalibrationReferences, ProjectReferences};
@@ -24,9 +25,9 @@ use crate::targets::{
 };
 use crate::{
     AssetReference, AssociationKind, AssociationState, Availability, CorrectionInput,
-    ExpectedAsset, FileIdentity, FramingMargins, LibraryError, Location, LocationRole, NativePath,
-    ObservationFingerprint, ReferenceKind, RemapReview, RetireReview, Revision, ScanOperation,
-    ScanOptions, ScanState, TargetCandidate,
+    ExpectedAsset, FileIdentity, FramingMargins, LibraryError, Location, LocationLifecycle,
+    LocationRole, NativePath, ObservationFingerprint, ReferenceKind, RemapReview, RetireReview,
+    Revision, ScanOperation, ScanOptions, ScanState, StorageSettings, TargetCandidate,
 };
 use persistence_library::{
     Catalog, CorrectionOutcome, CorrectionPreview, LocationReferences, LocationRegistration,
@@ -341,6 +342,32 @@ impl Library {
         let location =
             self.catalog.apply_remap(review_id, expected, InventoryProbe::default()).await?;
         Ok(self.location_changed(location))
+    }
+
+    /// Every registered location, each Active and Available one with its
+    /// volume's free and used space and low-space flag probed now through
+    /// the root check Import uses (Home Status, PRJ-FR-17 section 4;
+    /// Settings › Locations, LIB-FR-21), low under the share the workflow
+    /// settings' `storage` names. All stay unknown, never zero, for a retired
+    /// or offline location and for a root or volume that cannot be read.
+    ///
+    /// # Errors
+    /// Catalog read failures, recorded workflow settings that are not valid
+    /// among them.
+    pub async fn list_locations(&self) -> Result<Vec<Location>, LibraryError> {
+        let mut locations = self.catalog.list_locations().await?;
+        let storage = self.catalog.workflow_settings().await?.0.storage;
+        let probes = locations.clone();
+        let spaces = blocking(move || {
+            Ok(probes.iter().map(|location| volume_space(location, storage)).collect::<Vec<_>>())
+        })
+        .await?;
+        for (location, space) in locations.iter_mut().zip(spaces) {
+            location.free_bytes = space.map(|space| space.free);
+            location.used_bytes = space.map(|space| space.used);
+            location.low_space = space.map(|space| space.low);
+        }
+        Ok(locations)
     }
 
     /// Register a qualified native root without scanning or modifying its files.
@@ -1122,6 +1149,31 @@ pub(crate) async fn blocking<T: Send + 'static>(
     })?
 }
 
+/// A probed volume: the bytes free to the user, the bytes in use (its
+/// capacity less its free blocks, as `df` counts them), and whether the
+/// free bytes are low under the workflow settings' share.
+#[derive(Clone, Copy)]
+struct VolumeSpace {
+    free: u64,
+    used: u64,
+    low: bool,
+}
+
+/// The volume space of an Active, Available location under `storage`;
+/// `None` when the location is not probed or cannot be.
+fn volume_space(location: &Location, storage: StorageSettings) -> Option<VolumeSpace> {
+    if location.lifecycle != LocationLifecycle::Active
+        || location.availability != Availability::Available
+    {
+        return None;
+    }
+    let root = mounted_root(location).ok()?;
+    let free = fs4::available_space(&root).ok()?;
+    let capacity = fs4::total_space(&root).ok().filter(|&capacity| capacity > 0)?;
+    let used = capacity.saturating_sub(fs4::free_space(&root).ok()?);
+    Some(VolumeSpace { free, used, low: storage.is_low(free, capacity) })
+}
+
 /// How a root that failed its identity check reads: Offline when it is gone,
 /// Unreadable when access is denied, `IdentityConflict` for another volume or
 /// folder; `None` for any other failure.
@@ -1149,6 +1201,29 @@ mod tests {
     use crate::inventory::{OsVolumes, Probed, VolumeCache, VolumeProbe};
     use crate::scan_support::scan_to_end;
     use crate::{ExpectedAsset, Quality};
+
+    #[test]
+    fn a_volume_is_low_just_below_the_configured_share_and_not_at_it() {
+        let capacity = 1_000_000_000_000;
+        let default = StorageSettings::default();
+        assert_eq!(default.low_space_percent, 10, "10% by default (owner, 2026-11-02)");
+        for storage in [default, StorageSettings { low_space_percent: 25 }] {
+            let at = capacity / 100 * u64::from(storage.low_space_percent);
+            assert!(storage.is_low(at - 1, capacity), "just below the share is low: {storage:?}");
+            assert!(!storage.is_low(at, capacity), "exactly the share is not low: {storage:?}");
+            assert!(!storage.is_low(capacity, capacity));
+            assert!(storage.is_low(0, capacity));
+        }
+        let between = capacity / 100 * 15;
+        assert!(!default.is_low(between, capacity), "15% free is not low at 10%");
+        assert!(
+            StorageSettings { low_space_percent: 25 }.is_low(between, capacity),
+            "but is at 25%"
+        );
+        let widest =
+            StorageSettings { low_space_percent: *StorageSettings::LOW_SPACE_PERCENT.end() };
+        assert!(!widest.is_low(u64::MAX, u64::MAX), "no overflow at the largest volume");
+    }
 
     fn target_basis(detail: &SessionDetail) -> BTreeMap<Uuid, ObservationFingerprint> {
         detail

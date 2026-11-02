@@ -24,7 +24,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::Availability;
+use crate::{Availability, ImportState};
 
 /// What an issue is about; the client words it by kind.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
@@ -43,7 +43,8 @@ pub enum IssueKind {
     LocationDenied,
     /// A location that is offline or whose root is missing.
     LocationOffline,
-    /// A scan, measurement run or Apply that failed.
+    /// A scan, measurement run or Apply that failed, or an import that
+    /// settled failed or partial (its Home row only; see [`Self::of_import`]).
     WorkFailed,
     /// An import or measurement run left unfinished.
     WorkInterrupted,
@@ -108,6 +109,19 @@ impl IssueKind {
             Availability::Offline | Availability::Missing => Some(Self::LocationOffline),
             Availability::Unreadable | Availability::IdentityConflict => Some(Self::LocationDenied),
             Availability::Available | Availability::Retired | Availability::Trashed => None,
+        }
+    }
+
+    /// The issue a started import in `state` raises on its rows when it has
+    /// one: interrupted while it waits for Retry, failed work once it settled
+    /// short of what the user approved (Home's Pending ingestions, which a
+    /// Dismiss of that issue leaves); none while it runs or for a preview.
+    #[must_use]
+    pub const fn of_import(state: ImportState) -> Option<Self> {
+        match state {
+            ImportState::Interrupted => Some(Self::WorkInterrupted),
+            ImportState::Settled => Some(Self::WorkFailed),
+            ImportState::Previewed | ImportState::Running => None,
         }
     }
 }

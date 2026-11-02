@@ -3,7 +3,8 @@
  * shared F4 patterns. CalibrationDiagram, CalibrationChoices with its
  * CalibrationChoiceBadge, ViewFolderTree, PlaceLink, the session-row
  * badges (DuplicatesBadge, ReadinessBadge), the Calibration library's
- * master-row MasterAgeBadge and the rig pickers' NoSavedRigs, on the sample
+ * master-row MasterAgeBadge, a Location's LocationFreeSpace and the rig
+ * pickers' NoSavedRigs, on the sample
  * calibration library (fixtures/calibration.ts, fixtures/view-tree.ts) and on a what-if
  * of it: a RedCat session pins the older dark version (mixed versions, darks
  * in the nights), a second flat set gets `NIGHT_…-2`, a session is set to No
@@ -19,6 +20,7 @@ import { CalibrationChoices, type CalibrationChoiceRow, type CalibrationChoicesP
 import { CalibrationDiagram } from "@/components/domain/calibration-diagram"
 import type { CalibrationChoice } from "@/components/domain/calibration-model"
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
+import { LocationFreeSpace } from "@/components/domain/location-space"
 import { MasterAgeBadge } from "@/components/domain/master-age-badge"
 import { ReadinessBadge } from "@/components/domain/readiness-badge"
 import { NoSavedRigs } from "@/components/domain/saved-rigs"
@@ -236,6 +238,20 @@ function MasterAge() {
   )
 }
 
+/** A Location's free space on Home's Status and Settings › Locations: plenty, low under the saved share, and unknown. */
+function FreeSpace() {
+  const m = useMessages()
+  return (
+    <ComponentSection components={["LocationFreeSpace"]} description={m.catalogue_f4_free_space_desc()} level={3}>
+      <Specimen caption={m.catalogue_f4_free_space_states()}>
+        <LocationFreeSpace location={{ freeBytes: 900_000_000_000, lowSpace: false }} />
+        <LocationFreeSpace location={{ freeBytes: 40_000_000_000, lowSpace: true }} />
+        <LocationFreeSpace location={{ freeBytes: null, lowSpace: null }} />
+      </Specimen>
+    </ComponentSection>
+  )
+}
+
 /** A rig picker with no saved rig: where rigs are added, as text until Settings › Equipment is registered. */
 function NoRigs() {
   const m = useMessages()
@@ -258,6 +274,7 @@ export function F4Catalogue() {
       <Duplicates />
       <Readiness />
       <MasterAge />
+      <FreeSpace />
       <NoRigs />
     </Section>
   )

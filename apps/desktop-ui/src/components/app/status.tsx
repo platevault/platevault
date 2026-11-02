@@ -84,6 +84,10 @@ export const STATUS = {
     retired: s(m.status_retired, "muted", Archive),
     available: s(m.status_available, "success", Check),
   },
+  /** A volume's free space under the library's low-space share (PRJ-FR-17 section 4). */
+  space: {
+    low: s(m.status_low_space, "warning", TriangleAlert),
+  },
   access: {
     ok: s(m.status_readable, "success", Check),
     denied: s(m.status_access_denied, "danger", Lock),

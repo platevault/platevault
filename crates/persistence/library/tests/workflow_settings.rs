@@ -2,17 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The library's workflow settings in the catalog (D-W114; 064 LIB-FR-04,
-//! 065 PRJ-FR-31, 068 CAL-FR-15/20/21, J36 S8, 072 PLAN-FR-02): the defaults
-//! at revision 0, a revision-checked save of non-defaults that reads back
-//! whole, a stale save refused naming the settings, an invalid one refused
-//! naming its field with nothing stored, and per-band Moon-avoidance curves
-//! kept per band.
+//! 065 PRJ-FR-17/31, 068 CAL-FR-15/20/21, J36 S8, 072 PLAN-FR-02): the
+//! defaults at revision 0, a revision-checked save of non-defaults that reads
+//! back whole, a stale save refused naming the settings, an invalid one
+//! refused naming its field with nothing stored, per-band Moon-avoidance
+//! curves kept per band, and a row saved before the low-space share existed
+//! read with the default share.
 
 use persistence_library::{Catalog, WORKFLOW_SETTINGS_ID};
 use platevault_model::{
     Band, CalibrationSettings, DarkBiasRules, FieldPath, FlatRules, LibraryError, LibraryErrorCode,
-    MoonAvoidanceCurve, Revision, ViewMode, WorkflowSettings,
+    MoonAvoidanceCurve, Revision, StorageSettings, ViewMode, WorkflowSettings,
 };
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
+use sqlx::Connection;
 
 async fn catalog() -> (tempfile::TempDir, Catalog) {
     let dir = tempfile::tempdir().unwrap();
@@ -27,6 +30,7 @@ fn changed() -> WorkflowSettings {
         flats: FlatRules { window_nights: 3, ..defaults.flats },
         dark_bias: DarkBiasRules { window_days: 180 },
         calibration: CalibrationSettings { keep_raw_frames: true, old_master_after_days: 30 },
+        storage: StorageSettings { low_space_percent: 20 },
         ..defaults
     }
 }
@@ -88,6 +92,10 @@ async fn an_invalid_setting_is_refused_naming_its_field_and_nothing_is_stored() 
     inverted.flats.fine_within_deg = 9.0;
     let mut turned = changed();
     turned.framing.split.max_rotation_deg = 180.0;
+    let mut roomy = changed();
+    roomy.storage.low_space_percent = 51;
+    let mut never = changed();
+    never.storage.low_space_percent = 0;
     for (invalid, field) in [
         (zero_days, "calibration.oldMasterAfterDays"),
         (far, "moonAvoidance.Ha.distanceDeg"),
@@ -95,6 +103,8 @@ async fn an_invalid_setting_is_refused_naming_its_field_and_nothing_is_stored() 
         (inverted, "flats.fineWithinDeg"),
         // The split limits are flattened into the framing margins on the wire.
         (turned, "framing.maxRotationDeg"),
+        (roomy, "storage.lowSpacePercent"),
+        (never, "storage.lowSpacePercent"),
     ] {
         let refused: LibraryError = catalog.save_workflow_settings(0, &invalid).await.unwrap_err();
         assert_eq!(refused.code(), LibraryErrorCode::InvalidInput, "{refused:?}");
@@ -124,4 +134,24 @@ async fn moon_avoidance_curves_are_saved_per_band() {
     for band in [Band::R, Band::G, Band::B, Band::Ha, Band::Sii] {
         assert_eq!(curves.curve(band), defaults.curve(band), "{band:?} keeps its default");
     }
+}
+
+#[tokio::test]
+async fn a_row_saved_before_the_low_space_share_reads_the_default_share() {
+    let (dir, catalog) = catalog().await;
+    let revision = catalog.save_workflow_settings(0, &changed()).await.unwrap();
+    let mut row = serde_json::to_value(changed()).unwrap();
+    row.as_object_mut().unwrap().remove("storage").expect("the row names its share");
+    let mut raw = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new().filename(dir.path().join("catalog.sqlite")),
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE workflow_settings SET settings = ?1 WHERE id = 1")
+        .bind(row.to_string())
+        .execute(&mut raw)
+        .await
+        .unwrap();
+    let expected = WorkflowSettings { storage: StorageSettings::default(), ..changed() };
+    assert_eq!(catalog.workflow_settings().await.unwrap(), (expected, revision));
 }

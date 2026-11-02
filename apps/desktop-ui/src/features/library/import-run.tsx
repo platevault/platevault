@@ -71,7 +71,7 @@ export function RunStep({ op }: { op: ImportOperation_Serialize }) {
           columns={2}
           items={[
             { label: m.home_column_status(), value: <StatusBadge kind="operation" value={state} /> },
-            ...(op.state === "running" ? [{ label: m.home_column_progress(), value: m.home_percent({ percent: importPercent(op) }) }] : []),
+            ...(op.state === "running" ? [{ label: m.home_column_progress(), value: m.home_percent({ percent: importPercent(op.summary) }) }] : []),
             { label: m.import_imported(), value: formatCount(s.imported) },
             { label: m.import_duplicates(), value: formatCount(s.duplicates) },
             { label: m.import_type_unclassified(), value: formatCount(s.unclassified) },

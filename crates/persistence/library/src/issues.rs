@@ -14,7 +14,9 @@
 //! issue ([`forget_dismissal`] on Retry). A new failure is a new operation,
 //! so its fingerprint differs. A count that drops to none and returns
 //! unchanged is the same issue, and stays hidden; its dismissal row stays
-//! too, one per Dismiss the user chose.
+//! too, one per Dismiss the user chose. The import list leaves out an
+//! import whose issue is dismissed ([`is_dismissed`]): an interrupted one,
+//! and a settled one that failed, which never changes again.
 
 use std::collections::BTreeSet;
 
@@ -61,10 +63,7 @@ impl Catalog {
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn issue_dismissals(&self) -> Result<BTreeSet<String>> {
         let mut conn = self.reader().await?;
-        let rows: Vec<String> = sqlx::query_scalar("SELECT fingerprint FROM issue_dismissals")
-            .fetch_all(&mut *conn)
-            .await?;
-        Ok(rows.into_iter().collect())
+        dismissals(&mut conn).await
     }
 
     /// Record that the issue with `fingerprint` is dismissed. Dismissing it
@@ -198,4 +197,24 @@ pub async fn forget_dismissal(
         .execute(&mut *conn)
         .await?;
     Ok(())
+}
+
+/// The fingerprints of the dismissed issues, read on `conn`.
+pub async fn dismissals(conn: &mut SqliteConnection) -> Result<BTreeSet<String>> {
+    let rows: Vec<String> = sqlx::query_scalar("SELECT fingerprint FROM issue_dismissals")
+        .fetch_all(&mut *conn)
+        .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// Whether `dismissed` holds the dismissal of the issue of `kind` about
+/// `about`, whatever its count and bytes: the match [`forget_dismissal`]
+/// forgets.
+#[must_use]
+pub fn is_dismissed(dismissed: &BTreeSet<String>, kind: IssueKind, about: Uuid) -> bool {
+    let prefix = Issue::fingerprint_prefix(kind, Some(about));
+    dismissed
+        .range(prefix.clone()..)
+        .next()
+        .is_some_and(|fingerprint| fingerprint.starts_with(&prefix))
 }

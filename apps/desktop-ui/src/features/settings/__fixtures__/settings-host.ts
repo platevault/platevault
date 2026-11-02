@@ -23,6 +23,9 @@ export function location(id: string, name: string, role: LocationState["location
       identity: { volume: { kind: "uuid", value: "vol-1" }, fileId: null } as never,
       decisionRevision: 1,
       availability: "available",
+      freeBytes: null,
+      usedBytes: null,
+      lowSpace: null,
       lastObservedAt: null,
       lifecycle: "active",
       volumeKind: "local",
@@ -69,6 +72,7 @@ export const WORKFLOW: WorkflowSettingsRecord_Serialize = {
     viewMode: "symlinks",
     calibration: { keepRawFrames: false, oldMasterAfterDays: 180 },
     moonAvoidance: { L: CURVE, R: CURVE, G: CURVE, B: CURVE, Ha: { distanceDeg: 60, widthDays: 5 }, SII: CURVE, OIII: CURVE },
+    storage: { lowSpacePercent: 10 },
   },
 }
 

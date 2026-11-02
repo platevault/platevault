@@ -13,7 +13,8 @@ export const commands = {
 	 */
 	libraryRegisterLocation: (path: NativePathWire, displayName: string, role: LocationRole) => typedError<Location, ErrorResponse>(__TAURI_INVOKE("library_register_location", { path, displayName, role })),
 	/**
-	 *  Registered locations with availability, last observation and access failure.
+	 *  Registered locations with availability, last observation, access failure
+	 *  and, while online, the free space and low-space flag of their volume.
 	 * 
 	 *  # Errors
 	 *  `PersistenceFailure` when the catalog cannot be read.
@@ -1306,6 +1307,23 @@ export const commands = {
 	 *  `NotFound` for an unknown import.
 	 */
 	importStatus: (id: string) => typedError<ImportOperation_Serialize, ErrorResponse>(__TAURI_INVOKE("import_status", { id })),
+	/**
+	 *  Every started import in `states`, most recently updated first, with its
+	 *  durable state and summary.
+	 * 
+	 *  # Errors
+	 *  `PersistenceFailure` for an unreadable catalog.
+	 */
+	importList: (states: ImportListState[]) => typedError<ImportListEntry[], ErrorResponse>(__TAURI_INVOKE("import_list", { states })),
+	/**
+	 *  Dismiss a settled import that failed or only partly completed, so
+	 *  `import_list` no longer lists it (Home Pending ingestions).
+	 * 
+	 *  # Errors
+	 *  `NotFound` for an unknown import; `InvalidInput` for a preview, a running
+	 *  or interrupted import and one that settled cleanly.
+	 */
+	importDismiss: (id: string) => typedError<null, ErrorResponse>(__TAURI_INVOKE("import_dismiss", { id })),
 	/**
 	 *  Merge the sessions holding `seqs` (an item of each) into one before the
 	 *  import starts; only sessions that differ in framing alone merge.
@@ -4831,6 +4849,24 @@ export type ImportItemPhase =
 /**  An interruption left a state the recorded evidence cannot prove. */
 "uncertain";
 
+/**  One started import with its durable state and exact counts. */
+export type ImportListEntry = {
+	id: string,
+	sourcePath: NativePathWire,
+	state: ImportListState,
+	summary: ImportSummary,
+	updatedAt: string,
+};
+
+/**
+ *  Where a started import stands, as its list reads it. A settled import
+ *  falls short when an item Failed, stayed Uncertain, or kept its source
+ *  because the source or its kept copy failed verification (the run page's
+ *  partial rule, [`ImportSummary::falls_short`]). It is then Failed when
+ *  nothing came across and Partial when something did, otherwise Settled.
+ */
+export type ImportListState = "running" | "interrupted" | "failed" | "partial" | "settled";
+
 /**  Copy keeps every source; Move sends each re-verified source to the OS Trash. */
 export type ImportMode = "copy" | "move";
 
@@ -5355,7 +5391,10 @@ export type IssueKind =
 "location-denied" | 
 /**  A location that is offline or whose root is missing. */
 "location-offline" | 
-/**  A scan, measurement run or Apply that failed. */
+/**
+ *  A scan, measurement run or Apply that failed, or an import that
+ *  settled failed or partial (its Home row only; see [`Self::of_import`]).
+ */
 "work-failed" | 
 /**  An import or measurement run left unfinished. */
 "work-interrupted" | 
@@ -5540,6 +5579,23 @@ export type Location = {
 	decisionRevision: number,
 	/**  Last-observed access state; a retired location keeps the one it had. */
 	availability: Availability,
+	/**
+	 *  Free bytes on the location's volume when the list was read; `None`
+	 *  when unknown: offline, or its root or volume cannot be probed. Records
+	 *  the catalog returns without a probe report `None` too.
+	 */
+	freeBytes: number | null,
+	/**
+	 *  Used bytes on the location's volume (its capacity less its free
+	 *  blocks) when the list was read; `None` exactly when
+	 *  [`Self::free_bytes`] is.
+	 */
+	usedBytes: number | null,
+	/**
+	 *  Free space is under the low-space share of the volume's capacity;
+	 *  `None` exactly when [`Self::free_bytes`] is.
+	 */
+	lowSpace: boolean | null,
 	lastObservedAt: string | null,
 	lifecycle: LocationLifecycle,
 	/**
@@ -8574,6 +8630,16 @@ export type StorageOperationKind =
  */
 "move";
 
+/**  The Settings › Locations storage values (PRJ-FR-17 item 4). */
+export type StorageSettings = {
+	/**
+	 *  A Location is low on space when its volume's free space is under
+	 *  this percentage of the volume's capacity, from 1 to 50; 10 by
+	 *  default (owner's answer, 2026-11-02).
+	 */
+	lowSpacePercent: number,
+};
+
 /**  A display stretch in plane units (linear) or normalized units (MTF). */
 export type Stretch = { kind: "linear"; black: number | null; white: number | null } | { kind: "mtf"; shadows: number | null; midtones: number | null; highlights: number | null } | { kind: "auto" };
 
@@ -9717,6 +9783,11 @@ export type WorkflowSettings_Deserialize = {
 	viewMode: ViewMode,
 	calibration: CalibrationSettings,
 	moonAvoidance: MoonAvoidance,
+	/**
+	 *  The Settings › Locations storage values. A catalog row saved before
+	 *  they existed reads them as the defaults rather than being refused.
+	 */
+	storage?: StorageSettings,
 };
 
 /**  The library's F4 workflow settings: one document under one revision. */
@@ -9730,6 +9801,11 @@ export type WorkflowSettings_Serialize = {
 	viewMode: ViewMode,
 	calibration: CalibrationSettings,
 	moonAvoidance: MoonAvoidance,
+	/**
+	 *  The Settings › Locations storage values. A catalog row saved before
+	 *  they existed reads them as the defaults rather than being refused.
+	 */
+	storage: StorageSettings,
 };
 
 /**  Why Wrap up doesn't open, or one of its steps can't run now. */

@@ -258,7 +258,7 @@ fn on_session(kind: IssueKind, session_id: Uuid, count: u64) -> Issue {
     Issue::new(kind, IssueOwner::Session { id: session_id }, Some(session_id), count, None, None)
 }
 
-fn on_operation(kind: IssueKind, operation_id: Uuid, name: Option<String>) -> Issue {
+pub(crate) fn on_operation(kind: IssueKind, operation_id: Uuid, name: Option<String>) -> Issue {
     let owner = IssueOwner::Operation { id: operation_id };
     Issue::new(kind, owner, Some(operation_id), 1, None, name)
 }

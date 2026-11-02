@@ -118,7 +118,8 @@ pub async fn library_register_location(
     library.register_location(path, display_name, role).await.map_err(fail_at(None, scope))
 }
 
-/// Registered locations with availability, last observation and access failure.
+/// Registered locations with availability, last observation, access failure
+/// and, while online, the free space and low-space flag of their volume.
 ///
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
@@ -126,7 +127,7 @@ pub async fn library_register_location(
 #[specta::specta]
 pub async fn library_list_locations(library: State<'_, Arc<Library>>) -> Reply<Vec<LocationState>> {
     let catalog = library.catalog();
-    let locations = catalog.list_locations().await.map_err(fail(None))?;
+    let locations = library.list_locations().await.map_err(fail(None))?;
     let mut states = Vec::with_capacity(locations.len());
     for location in locations {
         let failure =

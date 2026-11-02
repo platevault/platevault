@@ -116,6 +116,7 @@ impl Shell {
                 desktop_shell::commands::rigs::library_save_camera,
                 desktop_shell::commands::targets_list::targets_get,
                 desktop_shell::commands::targets_list::targets_presets_list,
+                desktop_shell::commands::library::library_list_locations,
             ])
             .build(mock_context(noop_assets()))
             .expect("build mock app");
@@ -904,6 +905,93 @@ fn library_data_location_returns_the_native_catalog_directory() {
     let shell = Shell::new();
     let actual = shell.call("library_data_location", &json!({}));
     assert_eq!(actual, native_path(shell.dir.path()));
+}
+
+/// Home Status (PRJ-FR-17 section 4): an online location carries its
+/// volume's free and used space and low-space flag; an offline one reads
+/// unknown.
+#[test]
+fn library_list_locations_carries_the_volume_free_space_until_offline() {
+    let shell = Shell::new();
+    let root = shell.dir.path().join("Captures");
+    std::fs::create_dir_all(&root).expect("captures root");
+    let id = shell.destination(&root);
+    let location = |listed: &Value| {
+        let state = listed
+            .as_array()
+            .and_then(|states| states.iter().find(|state| state["location"]["id"] == json!(id)))
+            .unwrap_or_else(|| panic!("the location is listed: {listed}"));
+        let location = &state["location"];
+        (location["freeBytes"].clone(), location["usedBytes"].clone(), location["lowSpace"].clone())
+    };
+    let (free, used, low) = location(&shell.call("library_list_locations", &json!({})));
+    assert!(free.is_u64() && used.is_u64() && low.is_boolean(), "online: {free} {used} {low}");
+
+    let library = shell.library();
+    tauri::async_runtime::block_on(library.catalog().mark_location_unavailable(
+        id,
+        platevault_core::Availability::Offline,
+        "ejected",
+    ))
+    .expect("mark offline");
+    let (free, used, low) = location(&shell.call("library_list_locations", &json!({})));
+    assert_eq!(
+        (free, used, low),
+        (Value::Null, Value::Null, Value::Null),
+        "offline is unknown, never zero"
+    );
+}
+
+/// PRJ-FR-17 item 4: the low-space share is `storage.lowSpacePercent` of the
+/// workflow settings, 10 by default, and `library_list_locations` probes with
+/// the saved one (core's tests pin the boundary against the volume); a share
+/// outside 1 to 50 is refused naming the field with nothing stored.
+#[test]
+fn the_low_space_share_is_a_workflow_setting_library_list_locations_reads() {
+    let shell = Shell::new();
+    let root = shell.dir.path().join("Captures");
+    std::fs::create_dir_all(&root).expect("captures root");
+    let id = shell.destination(&root);
+    let low = || {
+        let listed = shell.call("library_list_locations", &json!({}));
+        let state = listed
+            .as_array()
+            .and_then(|states| states.iter().find(|state| state["location"]["id"] == json!(id)))
+            .unwrap_or_else(|| panic!("the location is listed: {listed}"))
+            .clone();
+        state["location"]["lowSpace"].as_bool().expect("an online location is probed")
+    };
+    let read = shell.call("workflow_settings_get", &json!({}));
+    assert_eq!(read["settings"]["storage"], json!({"lowSpacePercent": 10}), "{read}");
+
+    let mut settings = read["settings"].clone();
+    let mut flags = Vec::new();
+    for (revision, percent) in [(0, 1), (1, 50)] {
+        settings["storage"]["lowSpacePercent"] = json!(percent);
+        let saved = shell.call(
+            "workflow_settings_save",
+            &json!({"settings": settings, "expectedRevision": revision}),
+        );
+        assert_eq!(saved["settings"]["storage"]["lowSpacePercent"], json!(percent), "{saved}");
+        flags.push(low());
+    }
+    // A volume low under 1% of its capacity is also low under 50%.
+    assert!(!flags[0] || flags[1], "low at 1% and at 50%: {flags:?}");
+
+    let mut invalid = settings.clone();
+    invalid["storage"]["lowSpacePercent"] = json!(51);
+    let refused = shell.refusal(
+        "workflow_settings_save",
+        &json!({"settings": invalid, "expectedRevision": 2}),
+        LibraryErrorCode::InvalidInput,
+        persistence_library::WORKFLOW_SETTINGS_ID,
+    );
+    assert_eq!(refused["field"], json!("storage.lowSpacePercent"), "{refused}");
+    let kept = shell.call("workflow_settings_get", &json!({}));
+    assert_eq!(
+        (kept["settings"]["storage"]["lowSpacePercent"].clone(), kept["revision"].clone()),
+        (json!(50), json!(2))
+    );
 }
 
 /// PLAN-TGT-FR-01/14: `targets_get` takes the Target and an optional list

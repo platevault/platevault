@@ -182,6 +182,18 @@ pub enum ReasonCode {
     Protected,
 }
 
+impl ReasonCode {
+    /// The reasons that say a destination, a source or a kept copy failed
+    /// its verification: an import counts its Failed and kept items with
+    /// one as `ImportSummary::failed_verification`.
+    pub const VERIFICATION: [Self; 4] = [
+        Self::DestinationMismatch,
+        Self::DestinationChanged,
+        Self::SourceDrift,
+        Self::KeptCopyUnproven,
+    ];
+}
+
 /// Why one item didn't finish: a stable `code` the client words, and an
 /// English `detail` that is diagnostic text for logs and tests, never
 /// user-facing copy.

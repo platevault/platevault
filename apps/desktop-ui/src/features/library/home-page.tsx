@@ -35,10 +35,11 @@ import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem, StepLink } from "@/components/app/contracts"
-import { ActionError, EmptyState, UnknownValue } from "@/components/app/feedback"
+import { ActionError, EmptyState } from "@/components/app/feedback"
 import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
+import { LocationFreeSpace } from "@/components/domain/location-space"
 import { projectNextStep } from "@/components/domain/project-next-step"
 import { formatCount } from "@/lib/format"
 import { AddToProjectDialog } from "./add-to-project"
@@ -69,7 +70,7 @@ export function HomePage() {
   const [editing, setEditing] = useState(false)
   const dashboard = useQuery(dashboardQuery())
   const data = dashboard.data ?? null
-  const ingestions = useIngestions(data)
+  const ingestions = useIngestions()
   const locations = useQuery(locationsQuery())
   const editCriteria = criteria.data ? () => setEditing(true) : undefined
 
@@ -83,7 +84,7 @@ export function HomePage() {
       count: ingestions.rows.length,
       flush: true,
       actions: allAction(m, follow, "home-ingestions", ingestions.rows.length, { to: "/settings/locations" }),
-      content: <IngestionsTable ingestions={ingestions} dashboardReady={data !== null} />,
+      content: <IngestionsTable ingestions={ingestions} />,
     },
     {
       id: "home-pending",
@@ -301,7 +302,7 @@ function OpenWorkTable({ projects, follow }: { projects: HomeProject[]; follow: 
         onRowClick={(p) => follow(projectNextStep(m, p.project.id, p.next).link)}
         empty={<EmptyState icon={FolderPlus} title={m.home_no_projects_in_progress()} action={<ActionButton action={{ id: "new-project", label: m.newproject_open_ellipsis(), opensDialog: true, run: () => follow({ to: "/projects", search: { new: "open" } }) }} />} />}
       />
-      {/* astro-plan-wre19.10: goal deadlines and season windows ("N nights left", PRJ-FR-23); 1dhpb: calibration processes. */}
+      {/* astro-plan-wre19.28: goal deadlines and season windows ("N nights left", PRJ-FR-23); 1dhpb: calibration processes. */}
       <Unavailable what={m.home_deadlines_processes()} />
     </>
   )
@@ -324,8 +325,14 @@ function LocationsTable({ locations, loading, error, follow }: { locations: Loca
         return <StatusBadge kind="availability" value={a === "available" ? "online" : a === "unreadable" || a === "identity_conflict" ? "unreadable" : a === "missing" ? "absent" : "offline"} />
       },
     },
-    // astro-plan-wre19.10: Location carries no free space or low-space flag yet.
-    { id: "free", header: m.run_check_space(), align: "right", static: true, cell: () => <UnknownValue reason={m.home_unavailable({ what: m.run_check_space() })} /> },
+    {
+      id: "free",
+      header: m.run_check_space(),
+      align: "right",
+      sortValue: (r) => r.location.freeBytes,
+      // Unknown while offline or unprobeable, never zero; the Status column says why.
+      cell: (r) => <LocationFreeSpace location={r.location} />,
+    },
   ]
   return (
     <BoxTable

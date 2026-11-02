@@ -8,7 +8,7 @@
 
 **Amended**: 2026-10-06, to the [workflow redesign](../063-clean-rebuild-contract/decisions.md#workflow-redesign-2026-10-06) decisions D-W1 through D-W71, on 2026-10-07 to the answers D-W72 through D-W74, on 2026-10-14 to the F4 Project model, D-W93 through D-W106, on 2026-10-16 to the owner's answers of 2026-10-15/16, D-W107 through D-W116, and on 2026-10-19 to the owner's answers D-W100, D-W107, D-W110, D-W113, D-W114 and D-W118, plus removed-subject goal readdition (astro-plan-rzbzu.1).
 
-**Amended**: 2026-10-26, to the Round 11 decisions D-W146 and D-W148 and to the owner's answers D-W155 and D-W156. Amended 2026-10-29 to the owner's answer D-W170.
+**Amended**: 2026-10-26, to the Round 11 decisions D-W146 and D-W148 and to the owner's answers D-W155 and D-W156. Amended 2026-10-29 to the owner's answer D-W170. Amended 2026-11-02 to the owner's answer on the low-space threshold (PRJ-FR-17).
 
 **Status**: Backend landed; frontend and acceptance open (reconciled 2026-10-26, `specs/SPEC_STATUS.md`). Landed: backend deltas (#1780, #1782-#1785) and the F4 Project model (#1851). Remains: final-frontend acceptance of the Projects surface (astro-plan-z8seb) and verification. Product defaults and all human-approval gate waivers follow the root autonomous objective.
 
@@ -123,7 +123,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   1. Pending ingestions, per Captures location: new files since its last scan ("142 new files · Import"), a location never scanned or whose last scan did not finish, and stopped or failed imports with Retry. A running import changes its own row ("Importing 142 files · 40%").
   2. Pending work: sessions that need a Target, review or calibration (LIB-FR-17), sessions not in a Project, and sessions an open Project suggests.
   3. Open work: open Projects, plus calibration processes. Each row shows where it stands and its next step (PRJ-FR-18). Rows sort by deadline or season window and carry "N nights left" (PRJ-FR-23).
-  4. Status: locations, each online or offline with its free space and a low-space flag, and background jobs; imports show in Pending ingestions instead.
+  4. Status: locations, each online or offline with its free space and a low-space flag, and background jobs; imports show in Pending ingestions instead. A Location is low on space when its free space is under the configured percentage of its volume's capacity, 10% by default, set in Settings > Locations (owner's answer, 2026-11-02).
   5. Tonight: the unfinished goals graded for tonight at the default site (PLAN-FR-11). Home names the site; the user changes it on Targets.
   6. Calendar: five weeks starting this week (PLAN-FR-12).
 

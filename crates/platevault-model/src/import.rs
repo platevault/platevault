@@ -387,6 +387,45 @@ pub struct ImportSummary {
     pub uncertain: u64,
 }
 
+impl ImportSummary {
+    /// Some approved item didn't come across as reviewed: it Failed, stayed
+    /// Uncertain, or failed verification (a Failed item, or a kept source
+    /// whose source or kept copy didn't verify). The run page reads such a
+    /// settled import as partial, and the import list as Failed or Partial.
+    #[must_use]
+    pub const fn falls_short(&self) -> bool {
+        self.failed > 0 || self.failed_verification > 0 || self.uncertain > 0
+    }
+}
+
+/// Where a started import stands, as its list reads it. A settled import
+/// falls short when an item Failed, stayed Uncertain, or kept its source
+/// because the source or its kept copy failed verification (the run page's
+/// partial rule, [`ImportSummary::falls_short`]). It is then Failed when
+/// nothing came across and Partial when something did, otherwise Settled.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub enum ImportListState {
+    Running,
+    Interrupted,
+    Failed,
+    Partial,
+    Settled,
+}
+
+/// One started import with its durable state and exact counts.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct ImportListEntry {
+    pub id: Uuid,
+    pub source_path: NativePath,
+    pub state: ImportListState,
+    pub summary: ImportSummary,
+    pub updated_at: String,
+}
+
 /// One session the import's lights form at intake, as import review shows it
 /// before the import is confirmed (LIB-FR-04, LIB-FR-24, D-W107): a night's
 /// lights of one capture key split by framing, merged or re-split by the user.
