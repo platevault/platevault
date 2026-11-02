@@ -14,11 +14,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import type { Issue, IssueView, LocationState, NativeQuitRequest, ScanOperation, ScanProgressEvent } from "@/api/ipc"
 import { NATIVE_QUIT_CONFIRM_EVENT, SCAN_PROGRESS_EVENT } from "@/api/ipc"
 import { createQueryClient } from "@/api/query"
-import { m } from "@/lib/i18n"
+import { SessionReview } from "@/features/review/review-workspace"
+import { reviewHost as createReviewHost, SESSION_ID } from "@/features/review/__fixtures__/review-host"
 import { createAppRouter, createShellRouter } from "@/routes"
 import { setSingleKeyShortcuts } from "./preferences"
 import { AppRoot } from "./root"
 import { closePanel } from "./ui-state"
+import { m } from "@/lib/i18n"
 
 // DataTable (the keyboard help) measures its room and keeps rows in view; jsdom has neither.
 const original = { resizeObserver: globalThis.ResizeObserver, scrollIntoView: Element.prototype.scrollIntoView }
@@ -141,10 +143,11 @@ function testPage(path: string) {
   )
 }
 
-/** The shell's own router over test pages at `paths`, plus one that fails to render. */
-function renderShell(paths: string[], at: string) {
+/** The shell's own router over test pages and, optionally, a live Review surface. */
+function renderShell(paths: string[], at: string, review = false) {
   const history = createMemoryHistory({ initialEntries: [at] })
   const pages = (appWindow: AnyRoute): AnyRoute[] => [
+    ...(review ? [createRoute({ getParentRoute: () => appWindow, path: "/review", component: () => <SessionReview sessionId={SESSION_ID} onFinished={() => {}} readOnly={null} /> })] : []),
     ...paths.map((path) => createRoute({ getParentRoute: () => appWindow, path, component: testPage(path) })),
     createRoute({
       getParentRoute: () => appWindow,
@@ -365,6 +368,17 @@ describe("navigation", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "page /projects" })).toBeInTheDocument()
   })
 
+  it("lets G then P reach Projects while the real Review capture handler is mounted", async () => {
+    const user = userEvent.setup()
+    mockIPC(createReviewHost().handle)
+    const { history } = renderShell(["/", "/projects"], "/review", true)
+    await screen.findByRole("button", { name: m.review_display() })
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "g", bubbles: true })))
+    expect(history.location.pathname).toBe("/review")
+    await user.keyboard("p")
+    await waitFor(() => expect(history.location.pathname).toBe("/projects"))
+    expect(await screen.findByRole("heading", { level: 1, name: "page /projects" })).toBeInTheDocument()
+  })
   it("fires no single-key shortcut while the setting is off", async () => {
     const user = userEvent.setup()
     libraryHost()

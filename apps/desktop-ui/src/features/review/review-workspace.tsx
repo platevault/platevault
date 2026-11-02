@@ -8,8 +8,8 @@
  * - The three views are one list: they share the filter, the sort, the
  *   selection and the current frame, and every hotkey (keys.ts) acts the
  *   same in each. T and the toolbar's height control cycle the table through
- *   about 8 rows (resizable, remembered), the one-line strip and full
- *   height; ⌥1 to ⌥4 filter it.
+ *   about 8 rows (resizable, remembered), the one-line strip and full height;
+ *   V cycles table, filmstrip and grid. ⌥1 to ⌥4 filter the list.
  * - P, X and U set library quality (Usable, Unusable, Unreviewed), shown as
  *   Picked, Rejected and Unreviewed. A mark applies to the selection when
  *   more than one frame is selected, else to the current frame; after it the
@@ -27,7 +27,7 @@
  *   views, Compare and the corner inspector still work. The step footer
  *   shows the lock, and fullscreen, which covers it, shows it in its bar.
  */
-import { ArrowLeftRight, ChevronLeft, ChevronRight, Expand, Grid3x3, ImageOff, Lock, Minimize, Rows3 } from "lucide-react"
+import { ArrowLeftRight, ChevronLeft, ChevronRight, Expand, Grid3x3, ImageOff, Layers, Lock, Minimize, Rows3 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { failureOf, type Quality, type ReviewFilter, type ReviewFrame_Serialize } from "@/api/ipc"
 import { getPreferences, useMessages } from "@/app/preferences"
@@ -117,7 +117,6 @@ function ReviewWorkspace({ sessionId, onFinished, readOnly }: SessionReviewProps
   const [selection, setSelection] = useState<Selection>(NO_SELECTION)
   const [storedCurrent, setStoredCurrent] = useState<string | null>(null)
   const [view, setView] = useState<ListView>("table")
-  const [beforeGrid, setBeforeGrid] = useState<Exclude<ListView, "grid">>("table")
   const [height, setHeight] = useState<TableHeight>("rows")
   const [compare, setCompare] = useState(false)
   const [refId, setRefId] = useState<string | null>(null)
@@ -240,7 +239,6 @@ function ReviewWorkspace({ sessionId, onFinished, readOnly }: SessionReviewProps
   }
 
   function chooseView(next: ListView) {
-    if (next === "grid" && view !== "grid") setBeforeGrid(view === "filmstrip" ? "filmstrip" : "table")
     setView(next)
     if (next !== view) announce(m.review_announce_view({ view: viewLabel(m, next) }))
   }
@@ -291,8 +289,9 @@ function ReviewWorkspace({ sessionId, onFinished, readOnly }: SessionReviewProps
     announce(fullscreen ? m.review_announce_fullscreen_off() : m.review_announce_fullscreen_on())
   }
 
-  function toggleGrid() {
-    chooseView(view === "grid" ? beforeGrid : "grid")
+  function cycleView() {
+    const next: ListView = view === "table" ? "filmstrip" : view === "filmstrip" ? "grid" : "table"
+    chooseView(next)
   }
 
   function selectAll() {
@@ -325,8 +324,8 @@ function ReviewWorkspace({ sessionId, onFinished, readOnly }: SessionReviewProps
         case "compare":
           startCompare()
           return true
-        case "grid":
-          toggleGrid()
+        case "view":
+          cycleView()
           return true
         case "height":
           cycleHeight()
@@ -378,7 +377,7 @@ function ReviewWorkspace({ sessionId, onFinished, readOnly }: SessionReviewProps
         act("zoom", m.review_cmd_zoom(), REVIEW_KEYS.zoom, { id: "zoom" }, noFrame),
         act("fullscreen", m.review_cmd_fullscreen(), REVIEW_KEYS.fullscreen, { id: "fullscreen" }, noFrame),
         act("compare", compare ? m.review_compare_end() : m.review_cmd_compare(), REVIEW_KEYS.compare, { id: "compare" }, noFrame ?? (frames.length < 2 ? m.review_compare_needs_other() : null)),
-        act("grid", m.review_cmd_grid(), REVIEW_KEYS.grid, { id: "grid" }),
+        act("view", m.review_cmd_view(), REVIEW_KEYS.view, { id: "view" }),
         act("height", m.review_cmd_height(), REVIEW_KEYS.height, { id: "height" }),
         act("corners", m.review_corner_inspector(), `${MOD_LABEL}I`, { id: "corners" }, noFrame),
         act("select-all", m.review_cmd_select_all(), `${MOD_LABEL}A`, { id: "select-all" }, orderedIds.length === 0 ? m.review_empty_none() : null),
@@ -395,9 +394,8 @@ function ReviewWorkspace({ sessionId, onFinished, readOnly }: SessionReviewProps
   const handlers = useRef(latest)
   handlers.current = latest
 
-  // Review's keys, on the capture phase so they win over the app's own while Review is open: G is the grid here
-  // (PIX-FR-13) where the shell starts a G go-to sequence (spec 063 FR-042), and ⌘↩ is Finish review. That G
-  // conflict is an open owner question; until it is settled Review's G wins inside Review.
+  // Review handles V for view cycling; G falls through to the shell's go-to sequence (spec 063 FR-042).
+  // ⌘↩ is Finish review.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || isTyping(event.target) || popupOpen()) return
@@ -642,8 +640,8 @@ function ReviewWorkspace({ sessionId, onFinished, readOnly }: SessionReviewProps
             <>
               <IconButton label={m.review_cmd_previous()} icon={ChevronLeft} shortcut={REVIEW_KEYS.previous} disabled={index <= 0} onClick={() => step(-1)} />
               <IconButton label={m.review_cmd_next()} icon={ChevronRight} shortcut={REVIEW_KEYS.next} disabled={index < 0 || index >= orderedIds.length - 1} onClick={() => step(1)} />
+              <IconButton label={m.review_cmd_view()} icon={Layers} shortcut={REVIEW_KEYS.view} onClick={cycleView} />
               <IconButton label={m.review_cmd_height()} icon={Rows3} shortcut={REVIEW_KEYS.height} onClick={cycleHeight} />
-              <IconButton label={m.review_corner_inspector()} icon={Grid3x3} shortcut={`${MOD_LABEL}I`} aria-pressed={corners} onClick={toggleCorners} />
               <ActionButton action={{ id: "compare", label: compare ? m.review_compare_end() : m.review_compare(), icon: ArrowLeftRight, shortcut: REVIEW_KEYS.compare, run: () => startCompare() }} />
               <IconButton label={m.review_cmd_fullscreen()} icon={Expand} shortcut={REVIEW_KEYS.fullscreen} disabled={!current} onClick={() => setFullscreen(true)} />
               <DisplayMenu label={m.review_display()} groups={displayGroups} />
