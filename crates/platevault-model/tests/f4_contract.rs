@@ -371,6 +371,7 @@ fn workflow_defaults_are_the_owner_approved_starting_values() {
                 "SII": {"distanceDeg": 60.0, "widthDays": 7.0},
                 "OIII": {"distanceDeg": 110.0, "widthDays": 10.0},
             },
+            "storage": {"lowSpacePercent": 10},
         })
     );
     round_trip(&settings);
