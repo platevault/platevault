@@ -27,7 +27,7 @@ use crate::{
     AssetReference, AssociationKind, AssociationState, Availability, CorrectionInput,
     ExpectedAsset, FileIdentity, FramingMargins, LibraryError, Location, LocationLifecycle,
     LocationRole, NativePath, ObservationFingerprint, ReferenceKind, RemapReview, RetireReview,
-    Revision, ScanOperation, ScanOptions, ScanState, TargetCandidate,
+    Revision, ScanOperation, ScanOptions, ScanState, StorageSettings, TargetCandidate,
 };
 use persistence_library::{
     Catalog, CorrectionOutcome, CorrectionPreview, LocationReferences, LocationRegistration,
@@ -346,17 +346,22 @@ impl Library {
 
     /// Every registered location, each Active and Available one with its
     /// volume's free space and low-space flag probed now through the root
-    /// check Import uses (Home Status, PRJ-FR-17 section 4). Both stay unknown,
+    /// check Import uses (Home Status, PRJ-FR-17 section 4), low under the
+    /// share the workflow settings' `storage` names. Both stay unknown,
     /// never zero, for a retired or offline location and for a root or volume
     /// that cannot be read.
     ///
     /// # Errors
-    /// Catalog read failures.
+    /// Catalog read failures, recorded workflow settings that are not valid
+    /// among them.
     pub async fn list_locations(&self) -> Result<Vec<Location>, LibraryError> {
         let mut locations = self.catalog.list_locations().await?;
+        let storage = self.catalog.workflow_settings().await?.0.storage;
         let probes = locations.clone();
-        let spaces =
-            blocking(move || Ok(probes.iter().map(volume_space).collect::<Vec<_>>())).await?;
+        let spaces = blocking(move || {
+            Ok(probes.iter().map(|location| volume_space(location, storage)).collect::<Vec<_>>())
+        })
+        .await?;
         for (location, space) in locations.iter_mut().zip(spaces) {
             location.free_bytes = space.map(|(free, _)| free);
             location.low_space = space.map(|(_, low)| low);
@@ -1143,14 +1148,10 @@ pub(crate) async fn blocking<T: Send + 'static>(
     })?
 }
 
-/// The share of a volume's capacity below which its free space is low, in
-/// percent. Current specs give no number; this is legacy spec 030 §11.1 and
-/// FR-121 ("a volume drops below 10% free").
-const LOW_SPACE_PERCENT: u64 = 10;
-
 /// Free bytes on the volume of an Active, Available location and whether
-/// they are low; `None` when the location is not probed or cannot be.
-fn volume_space(location: &Location) -> Option<(u64, bool)> {
+/// they are low under `storage`; `None` when the location is not probed or
+/// cannot be.
+fn volume_space(location: &Location, storage: StorageSettings) -> Option<(u64, bool)> {
     if location.lifecycle != LocationLifecycle::Active
         || location.availability != Availability::Available
     {
@@ -1159,12 +1160,7 @@ fn volume_space(location: &Location) -> Option<(u64, bool)> {
     let root = mounted_root(location).ok()?;
     let free = fs4::available_space(&root).ok()?;
     let capacity = fs4::total_space(&root).ok().filter(|&capacity| capacity > 0)?;
-    Some((free, low_space(free, capacity)))
-}
-
-/// Whether `free` is under [`LOW_SPACE_PERCENT`] of `capacity`, exactly.
-fn low_space(free: u64, capacity: u64) -> bool {
-    u128::from(free) * 100 < u128::from(capacity) * u128::from(LOW_SPACE_PERCENT)
+    Some((free, storage.is_low(free, capacity)))
 }
 
 /// How a root that failed its identity check reads: Offline when it is gone,
@@ -1196,14 +1192,26 @@ mod tests {
     use crate::{ExpectedAsset, Quality};
 
     #[test]
-    fn a_volume_is_low_just_below_the_low_space_share_and_not_at_it() {
+    fn a_volume_is_low_just_below_the_configured_share_and_not_at_it() {
         let capacity = 1_000_000_000_000;
-        let at = capacity / 100 * LOW_SPACE_PERCENT;
-        assert!(low_space(at - 1, capacity), "just below the share is low");
-        assert!(!low_space(at, capacity), "exactly the share is not low");
-        assert!(!low_space(capacity, capacity));
-        assert!(low_space(0, capacity));
-        assert!(!low_space(u64::MAX, u64::MAX), "no overflow at the largest volume");
+        let default = StorageSettings::default();
+        assert_eq!(default.low_space_percent, 10, "10% by default (owner, 2026-11-02)");
+        for storage in [default, StorageSettings { low_space_percent: 25 }] {
+            let at = capacity / 100 * u64::from(storage.low_space_percent);
+            assert!(storage.is_low(at - 1, capacity), "just below the share is low: {storage:?}");
+            assert!(!storage.is_low(at, capacity), "exactly the share is not low: {storage:?}");
+            assert!(!storage.is_low(capacity, capacity));
+            assert!(storage.is_low(0, capacity));
+        }
+        let between = capacity / 100 * 15;
+        assert!(!default.is_low(between, capacity), "15% free is not low at 10%");
+        assert!(
+            StorageSettings { low_space_percent: 25 }.is_low(between, capacity),
+            "but is at 25%"
+        );
+        let widest =
+            StorageSettings { low_space_percent: *StorageSettings::LOW_SPACE_PERCENT.end() };
+        assert!(!widest.is_low(u64::MAX, u64::MAX), "no overflow at the largest volume");
     }
 
     fn target_basis(detail: &SessionDetail) -> BTreeMap<Uuid, ObservationFingerprint> {

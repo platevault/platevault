@@ -71,6 +71,7 @@ export const WORKFLOW: WorkflowSettingsRecord_Serialize = {
     viewMode: "symlinks",
     calibration: { keepRawFrames: false, oldMasterAfterDays: 180 },
     moonAvoidance: { L: CURVE, R: CURVE, G: CURVE, B: CURVE, Ha: { distanceDeg: 60, widthDays: 5 }, SII: CURVE, OIII: CURVE },
+    storage: { lowSpacePercent: 10 },
   },
 }
 

@@ -8610,6 +8610,16 @@ export type StorageOperationKind =
  */
 "move";
 
+/**  The Settings › Locations storage values (PRJ-FR-17 item 4). */
+export type StorageSettings = {
+	/**
+	 *  A Location is low on space when its volume's free space is under
+	 *  this percentage of the volume's capacity, from 1 to 50; 10 by
+	 *  default (owner's answer, 2026-11-02).
+	 */
+	lowSpacePercent: number,
+};
+
 /**  A display stretch in plane units (linear) or normalized units (MTF). */
 export type Stretch = { kind: "linear"; black: number | null; white: number | null } | { kind: "mtf"; shadows: number | null; midtones: number | null; highlights: number | null } | { kind: "auto" };
 
@@ -9753,6 +9763,11 @@ export type WorkflowSettings_Deserialize = {
 	viewMode: ViewMode,
 	calibration: CalibrationSettings,
 	moonAvoidance: MoonAvoidance,
+	/**
+	 *  The Settings › Locations storage values. A catalog row saved before
+	 *  they existed reads them as the defaults rather than being refused.
+	 */
+	storage?: StorageSettings,
 };
 
 /**  The library's F4 workflow settings: one document under one revision. */
@@ -9766,6 +9781,11 @@ export type WorkflowSettings_Serialize = {
 	viewMode: ViewMode,
 	calibration: CalibrationSettings,
 	moonAvoidance: MoonAvoidance,
+	/**
+	 *  The Settings › Locations storage values. A catalog row saved before
+	 *  they existed reads them as the defaults rather than being refused.
+	 */
+	storage: StorageSettings,
 };
 
 /**  Why Wrap up doesn't open, or one of its steps can't run now. */

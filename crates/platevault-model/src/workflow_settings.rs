@@ -5,9 +5,10 @@
 //! LIB-FR-04, CAL-FR-15/20/21, J36 S8, PLAN-FR-02): the owner-approved
 //! starting values for the same framing, mosaic panels, flat rotation and
 //! age, the dark and bias age window, the group keyword names, the input
-//! mode, whether raw calibration frames are kept, the old-master badge age
-//! and the Moon-avoidance curve of each band. All are adjustable in Settings;
-//! a catalog that records none reads these defaults.
+//! mode, whether raw calibration frames are kept, the old-master badge age,
+//! the Moon-avoidance curve of each band and the low-space share of a
+//! Location's volume (PRJ-FR-17). All are adjustable in Settings; a catalog
+//! that records none reads these defaults.
 
 use serde::{Deserialize, Serialize};
 
@@ -221,6 +222,48 @@ impl CalibrationSettings {
     }
 }
 
+/// The Settings › Locations storage values (PRJ-FR-17 item 4).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wire", derive(specta::Type, schemars::JsonSchema))]
+pub struct StorageSettings {
+    /// A Location is low on space when its volume's free space is under
+    /// this percentage of the volume's capacity, from 1 to 50; 10 by
+    /// default (owner's answer, 2026-11-02).
+    pub low_space_percent: u32,
+}
+
+impl Default for StorageSettings {
+    fn default() -> Self {
+        Self { low_space_percent: 10 }
+    }
+}
+
+impl StorageSettings {
+    /// The percentages [`Self::low_space_percent`] may take.
+    pub const LOW_SPACE_PERCENT: std::ops::RangeInclusive<u32> = 1..=50;
+
+    /// Whether `free` bytes are under the low-space share of `capacity`,
+    /// computed exactly.
+    #[must_use]
+    pub fn is_low(&self, free: u64, capacity: u64) -> bool {
+        u128::from(free) * 100 < u128::from(capacity) * u128::from(self.low_space_percent)
+    }
+
+    /// # Errors
+    /// `InvalidInput` naming `lowSpacePercent` outside 1 to 50.
+    pub fn validate(&self) -> Result<(), LibraryError> {
+        let percent = self.low_space_percent;
+        if !Self::LOW_SPACE_PERCENT.contains(&percent) {
+            return Err(LibraryError::invalid_field(
+                "lowSpacePercent",
+                format!("lowSpacePercent {percent} must be a whole percentage from 1 to 50"),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// One band's Moon-avoidance curve (PLAN-FR-02, D-W88): the Lorentzian of
 /// ACP and Target Scheduler, so the separation it requires from the Moon is
 /// `distance` at full Moon and shrinks with `width` as the Moon dims.
@@ -357,6 +400,10 @@ pub struct WorkflowSettings {
     pub view_mode: ViewMode,
     pub calibration: CalibrationSettings,
     pub moon_avoidance: MoonAvoidance,
+    /// The Settings › Locations storage values. A catalog row saved before
+    /// they existed reads them as the defaults rather than being refused.
+    #[serde(default)]
+    pub storage: StorageSettings,
 }
 
 impl WorkflowSettings {
@@ -366,7 +413,8 @@ impl WorkflowSettings {
         self.framing.validate().map_err(|error| error.within_field("framing"))?;
         self.flats.validate().map_err(|error| error.within_field("flats"))?;
         self.calibration.validate().map_err(|error| error.within_field("calibration"))?;
-        self.moon_avoidance.validate().map_err(|error| error.within_field("moonAvoidance"))
+        self.moon_avoidance.validate().map_err(|error| error.within_field("moonAvoidance"))?;
+        self.storage.validate().map_err(|error| error.within_field("storage"))
     }
 }
 

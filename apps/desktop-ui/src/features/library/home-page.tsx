@@ -35,12 +35,13 @@ import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem, StepLink } from "@/components/app/contracts"
-import { ActionError, EmptyState, UnknownValue } from "@/components/app/feedback"
+import { ActionError, EmptyState } from "@/components/app/feedback"
 import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
+import { LocationFreeSpace } from "@/components/domain/location-space"
 import { projectNextStep } from "@/components/domain/project-next-step"
-import { formatBytes, formatCount } from "@/lib/format"
+import { formatCount } from "@/lib/format"
 import { AddToProjectDialog } from "./add-to-project"
 import { homeCriteriaQuery } from "@/components/domain/plan-criteria"
 import { PlanCriteriaDialog } from "@/components/domain/plan-criteria-dialog"
@@ -330,14 +331,7 @@ function LocationsTable({ locations, loading, error, follow }: { locations: Loca
       align: "right",
       sortValue: (r) => r.location.freeBytes,
       // Unknown while offline or unprobeable, never zero; the Status column says why.
-      cell: (r) =>
-        r.location.freeBytes === null ? (
-          <UnknownValue />
-        ) : (
-          <>
-            {r.location.lowSpace ? <StatusBadge kind="space" value="low" /> : null} {m.import_free({ size: formatBytes(r.location.freeBytes) })}
-          </>
-        ),
+      cell: (r) => <LocationFreeSpace location={r.location} />,
     },
   ]
   return (

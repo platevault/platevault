@@ -1836,3 +1836,78 @@ async fn a_location_reports_its_free_space_until_it_cannot_be_probed_then_unknow
         "an offline location is unknown, never zero"
     );
 }
+
+/// PRJ-FR-17 item 4 (owner's answer, 2026-11-02): a Location is low on space
+/// under the share Settings › Locations saves, 10% of its volume's capacity
+/// by default; the share survives a reopen, and one outside 1 to 50 is
+/// refused naming `storage.lowSpacePercent` with nothing stored.
+#[tokio::test]
+async fn a_location_is_low_under_the_saved_share_of_its_volume_which_defaults_to_10() {
+    let Fixture { temp, library, captures, captures_id, .. } = Fixture::new().await;
+    let low = |locations: Vec<Location>| {
+        locations.into_iter().find(|location| location.id == captures_id).unwrap().low_space
+    };
+    let volume =
+        || (fs4::available_space(&captures).unwrap(), fs4::total_space(&captures).unwrap());
+    let record = library.workflow_settings().await.unwrap();
+    assert_eq!(
+        (record.settings.storage, record.revision),
+        (StorageSettings { low_space_percent: 10 }, 0),
+        "10% by default, with nothing saved"
+    );
+    let (free, capacity) = volume();
+    assert_eq!(
+        low(library.list_locations().await.unwrap()),
+        Some(record.settings.storage.is_low(free, capacity))
+    );
+
+    // The volume's free share, rounded down: low just above it, not at it.
+    let share = u32::try_from(u128::from(free) * 100 / u128::from(capacity)).unwrap();
+    let save = |percent: u32, expected: Revision| {
+        let library = Arc::clone(&library);
+        async move {
+            let settings = WorkflowSettings {
+                storage: StorageSettings { low_space_percent: percent },
+                ..WorkflowSettings::default()
+            };
+            library.save_workflow_settings(expected, &settings).await
+        }
+    };
+    let mut revision = 0;
+    for (percent, expected) in [(share + 1, true), (share, false)] {
+        if !StorageSettings::LOW_SPACE_PERCENT.contains(&percent) {
+            continue;
+        }
+        revision = save(percent, revision).await.unwrap().revision;
+        assert_eq!(
+            low(library.list_locations().await.unwrap()),
+            Some(expected),
+            "{percent}% with {share}% free"
+        );
+    }
+    revision = save(50, revision).await.unwrap().revision;
+    let (free, capacity) = volume();
+    let at_50 = StorageSettings { low_space_percent: 50 };
+    assert_eq!(low(library.list_locations().await.unwrap()), Some(at_50.is_low(free, capacity)));
+
+    for refused in [0, 51] {
+        let error = save(refused, revision).await.unwrap_err();
+        assert_eq!(error.code(), LibraryErrorCode::InvalidInput, "{refused}: {error:?}");
+        assert_eq!(
+            error.field().map(FieldPath::as_str),
+            Some("storage.lowSpacePercent"),
+            "{refused}"
+        );
+    }
+    drop(library);
+
+    let reopened = Library::open(&temp.path().join("catalog.sqlite"), None).await.unwrap();
+    let record = reopened.workflow_settings().await.unwrap();
+    assert_eq!(
+        (record.settings.storage, record.revision),
+        (at_50, revision),
+        "kept across a reopen; no refusal stored"
+    );
+    let (free, capacity) = volume();
+    assert_eq!(low(reopened.list_locations().await.unwrap()), Some(at_50.is_low(free, capacity)));
+}
