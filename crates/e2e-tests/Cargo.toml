@@ -13,7 +13,7 @@ path = "src/lib.rs"
 
 [dev-dependencies]
 # W3C WebDriver client (spec 037 adopted stack — see rust.tauri steering).
-thirtyfour = "0.37"
+thirtyfour = "0.38"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 anyhow = "1"
 serde = { workspace = true }
