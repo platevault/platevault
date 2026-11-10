@@ -145,6 +145,14 @@ ignore = [
   # instant: unmaintained, pulled in by moka (workspace dep) and crossbeam via older tauri.
   # moka 0.12 still depends on instant; upstream PR pending.
   { id = "RUSTSEC-2024-0384", reason = "instant via notify-types; moka 0.12 transitive; no moka release without instant yet" },
+  # SQLite < 3.54.0 can return uninitialized page-cache memory when a database is
+  # opened with a sibling -wal file of a different page size (CVE-2026-119375).
+  # Fixed in libsqlite3-sys 0.39, but every released sqlx-sqlite (0.9.0 is the
+  # newest) caps it below 0.38. sqlx main raised the cap (launchbadge/sqlx#4502,
+  # merged 2026-11-08). Exposure: local, and needs a crafted database plus -wal
+  # pair; the app opens only its own database. Remove once a sqlx release allows
+  # libsqlite3-sys 0.39 and `cargo update -p libsqlite3-sys` picks it up.
+  { id = "RUSTSEC-2026-0459", reason = "bundled SQLite via sqlx-sqlite; no sqlx release allows libsqlite3-sys >= 0.39 yet (launchbadge/sqlx#4502)" },
   # paste: unmaintained, pulled in transitively by specta rc chain.
   { id = "RUSTSEC-2024-0436", reason = "paste via specta macros; pinned to specta 2.0.0-rc.25; unblock when specta stable ships" },
   # zip 8.6 reaches the workspace only through thirtyfour 0.37 (dev-only: e2e_tests).
