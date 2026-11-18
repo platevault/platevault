@@ -175,4 +175,8 @@ ignore = [
   { id = "RUSTSEC-2026-0370", reason = "zvariant merged into zbus 6; via zbus 5 in notify-rust, tauri-plugin-single-instance and tauri-plugin-opener (Linux D-Bus); no zbus 6 release of them yet" },
   { id = "RUSTSEC-2026-0371", reason = "zbus_names merged into zbus 6; via zbus 5 in notify-rust, tauri-plugin-single-instance and tauri-plugin-opener (Linux D-Bus); no zbus 6 release of them yet" },
   { id = "RUSTSEC-2026-0372", reason = "zvariant_derive merged into zbus 6; via zbus 5 in notify-rust, tauri-plugin-single-instance and tauri-plugin-opener (Linux D-Bus); no zbus 6 release of them yet" },
+  # chrono 0.4.45: reported unmaintained (chronotope/chrono#1768) with no safe upgrade.
+  # It reaches the workspace only through trash 5.2.6 (fs_executor). No vulnerability is
+  # reported. Remove once trash drops chrono or chrono ships a maintained release.
+  { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no safe upgrade; transitive via trash 5.2.6 in fs_executor; no vulnerability reported" },
 ]

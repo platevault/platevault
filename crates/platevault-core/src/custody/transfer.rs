@@ -686,16 +686,30 @@ fn set_xattr(file: &fs::File, name: &[u8], value: &[u8]) -> std::io::Result<()> 
 /// copy, which keeps its source.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn carry_xattrs(source: &fs::File, copy: &fs::File, set: SetXattr) -> std::io::Result<()> {
-    use rustix::fs::{fgetxattr, flistxattr};
+    use rustix::fs::{fgetxattr, fgetxattr_query, flistxattr, flistxattr_query};
     use rustix::io::Errno;
 
-    let names = match sized(|buffer| flistxattr(source, buffer)) {
+    // rustix 1.1.6 no longer reads an empty buffer as a size query: it returns
+    // 0 without asking the kernel, so the size comes from the `_query` calls.
+    let names = match sized(|buffer| {
+        if buffer.is_empty() {
+            flistxattr_query(source)
+        } else {
+            flistxattr(source, buffer)
+        }
+    }) {
         Ok(names) => names,
         Err(errno) if [Errno::NOTSUP, Errno::OPNOTSUPP].contains(&errno) => return Ok(()),
         Err(errno) => return Err(errno.into()),
     };
     for name in names.split(|&byte| byte == 0).filter(|name| !name.is_empty() && carries(name)) {
-        let value = sized(|buffer| fgetxattr(source, name, buffer))?;
+        let value = sized(|buffer| {
+            if buffer.is_empty() {
+                fgetxattr_query(source, name)
+            } else {
+                fgetxattr(source, name, buffer)
+            }
+        })?;
         set(copy, name, &value)?;
     }
     Ok(())
