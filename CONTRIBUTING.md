@@ -8,7 +8,9 @@ below.
 This project requires a CLA for all contributions. When you open your first pull
 request, the CLA Assistant bot will comment with a link to review and sign the
 agreement. You only need to sign once — it covers all future contributions to
-this repository.
+the platevault repositories. The agreement text is in [`CLA.md`](CLA.md) and in a
+[public gist](https://gist.github.com/srobroek/a68b9d1b5e78409bedcd612eb530c79f) that CLA Assistant reads. A change to `CLA.md`
+must update the gist in the same change.
 
 **Why?** The CLA ensures the project maintainer retains the ability to offer the
 code under alternative licensing terms (e.g., a commercial license) without
