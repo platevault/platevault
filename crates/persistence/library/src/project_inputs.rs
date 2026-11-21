@@ -844,7 +844,7 @@ pub async fn session_captures(
     session_id: Uuid,
 ) -> Result<Vec<ProjectCapture>> {
     let mut row = load_session_row(conn, session_id).await?;
-    let assets = scoped_members(conn, &mut row, Members::Live).await?;
+    let assets: Vec<Asset> = scoped_members(conn, &mut row, Members::Live).await?;
     let view = CaptureView::read(conn, &[session_id], &assets).await?;
     let mut captures = Vec::new();
     for key in view.group(&assets).into_keys() {

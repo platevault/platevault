@@ -1354,6 +1354,8 @@ async fn inherited_confirmation_conflicts_survive_automatic_rescans_and_regroups
     let location = catalog.register_location(&fx.registration()).await.unwrap();
     scan(&catalog, &fx, &location, &names).await;
     let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    let ids: Vec<Uuid> = sessions.iter().map(|summary| summary.session.id).collect();
+    assert_eq!(catalog.list_session_ids(&SessionQuery::default()).await.unwrap(), ids);
     let ha = sessions.iter().find(|s| s.session.asset_ids.len() == 2).unwrap().session.clone();
     let oiii = sessions.iter().find(|s| s.session.asset_ids.len() == 1).unwrap().session.clone();
     let ngc = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
