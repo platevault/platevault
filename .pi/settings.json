@@ -1,0 +1,9 @@
+{
+  "packages": [
+    "npm:@srobroek/pi-lang-rust",
+    "npm:@srobroek/pi-lang-typescript",
+    "npm:@srobroek/pi-design",
+    "npm:@srobroek/pi-speckit-beads",
+    "npm:@srobroek/pi-user-journeys"
+  ]
+}
