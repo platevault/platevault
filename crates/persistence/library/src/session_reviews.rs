@@ -8,7 +8,7 @@
 //! derive readiness from that row plus every live logical capture's applicable
 //! quality; a later regroup therefore makes an older row stale without a migration.
 
-use platevault_model::{ApplicableQuality, LibraryError, Revision};
+use platevault_model::{ApplicableQuality, Asset, LibraryError, Revision};
 use sqlx::sqlite::SqliteConnection;
 use sqlx::Row;
 use sqlx::{Acquire, Connection};
@@ -41,7 +41,7 @@ impl Catalog {
             return Err(LibraryError::InvalidInput(format!("session {session_id} is superseded")));
         }
         let grouping_revision = row.session.grouping_revision;
-        let assets = scoped_members(&mut snapshot, &mut row, Members::Live).await?;
+        let assets: Vec<Asset> = scoped_members(&mut snapshot, &mut row, Members::Live).await?;
         let view = CaptureView::read(&mut snapshot, &[session_id], &assets).await?;
         let mut captures = Vec::new();
         let mut roots = Roots::new();
@@ -115,7 +115,7 @@ pub async fn finish(
 
     require_grouping_revision(session_id, grouping_revision, expected_grouping_revision)?;
     let mut session = super::load_session_row(conn, session_id).await?;
-    let assets = scoped_members(conn, &mut session, Members::Live).await?;
+    let assets: Vec<Asset> = scoped_members(conn, &mut session, Members::Live).await?;
     let view = CaptureView::read(conn, &[session_id], &assets).await?;
     let unreviewed = view
         .members(&assets)

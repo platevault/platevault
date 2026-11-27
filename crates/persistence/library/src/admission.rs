@@ -12,7 +12,7 @@
 //! calibration is unsettled, Ready or not: this contract only gates joining.
 
 use platevault_model::{
-    admit_session, counts_as_confirmed, session_blockers, AdmissionBasis, ApplicableQuality,
+    admit_session, counts_as_confirmed, session_blockers, AdmissionBasis, ApplicableQuality, Asset,
     AssociationKind, InputKind, LibraryError, PinState, ProjectLifecycle, SessionAdmission,
     SessionCalibration, SessionIntake,
 };
@@ -148,7 +148,7 @@ pub async fn read_intake(conn: &mut SqliteConnection, session_id: Uuid) -> Resul
             .fetch_optional(&mut *conn)
             .await?;
     let review_finished = reviewed.map(revision).transpose()? == Some(grouping_revision);
-    let assets = scoped_members(conn, &mut row, Members::Live).await?;
+    let assets: Vec<Asset> = scoped_members(conn, &mut row, Members::Live).await?;
     let view = CaptureView::read(conn, &[session_id], &assets).await?;
     let (mut unreviewed, mut changed) = (0_usize, 0_usize);
     for member in view.members(&assets) {
