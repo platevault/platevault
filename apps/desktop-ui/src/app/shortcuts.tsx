@@ -116,6 +116,7 @@ export function useGlobalShortcuts() {
           event.preventDefault()
           router.history.push(item.to)
         }
+        event.stopPropagation()
         return
       }
       if (event.key === "g") {
@@ -143,9 +144,9 @@ export function useGlobalShortcuts() {
         }
       }
     }
-    window.addEventListener("keydown", onKeyDown)
+    document.addEventListener("keydown", onKeyDown, true)
     return () => {
-      window.removeEventListener("keydown", onKeyDown)
+      document.removeEventListener("keydown", onKeyDown, true)
       window.clearTimeout(goTimer)
     }
   }, [router])
